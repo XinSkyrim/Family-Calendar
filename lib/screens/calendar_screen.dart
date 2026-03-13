@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../assets/figma_assets.dart';
+import '../models/task.dart';
 import '../widgets/event_card.dart';
+import 'add_task_screen.dart';
+import 'edit_task_screen.dart';
 import 'notifications_screen.dart';
 import 'family_screen.dart';
 import 'chat_screen.dart';
@@ -19,21 +22,45 @@ class CalendarScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: bgColor,
       body: SafeArea(
-        child: Center(
-          child: Container(
-            width: 430,
-            constraints: const BoxConstraints(maxWidth: 430),
-            child: Column(
-              children: [
-                _buildHeader(context),
-                const SizedBox(height: 16),
-                _buildDateSelector(),
-                const SizedBox(height: 16),
-                Expanded(child: _buildTimeline()),
-                _buildBottomNav(context),
-              ],
+        child: Stack(
+          children: [
+            Center(
+              child: Container(
+                width: 430,
+                constraints: const BoxConstraints(maxWidth: 430),
+                child: Column(
+                  children: [
+                    _buildHeader(context),
+                    const SizedBox(height: 16),
+                    _buildDateSelector(),
+                    const SizedBox(height: 16),
+                    Expanded(child: _buildTimeline(context)),
+                    const SizedBox(height: 90),
+                  ],
+                ),
+              ),
             ),
-          ),
+            Positioned(
+              right: 16,
+              bottom: 72,
+              child: FloatingActionButton(
+                shape: const CircleBorder(),
+                backgroundColor: accentColor,
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const AddTaskScreen()),
+                  );
+                },
+                child: const Icon(Icons.add),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: _buildBottomNav(context),
+            ),
+          ],
         ),
       ),
     );
@@ -177,7 +204,7 @@ class CalendarScreen extends StatelessWidget {
   // -----------------------------
   // Timeline
   // -----------------------------
-  Widget _buildTimeline() {
+  Widget _buildTimeline(BuildContext context) {
     return SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -185,11 +212,11 @@ class CalendarScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 8),
-            _timeRow('08:00', _blueEvent()),
+            _timeRow('08:00', _blueEvent(context)),
             const SizedBox(height: 24),
             _timeDivider('09:00'),
             const SizedBox(height: 24),
-            _timeRow('10:00', _purpleEvent()),
+            _timeRow('10:00', _purpleEvent(context)),
             const SizedBox(height: 24),
             _timeDivider('11:00'),
             const SizedBox(height: 80),
@@ -219,7 +246,7 @@ class CalendarScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 16),
-        right,
+        Expanded(child: right),
       ],
     );
   }
@@ -251,13 +278,24 @@ class CalendarScreen extends StatelessWidget {
   // -----------------------------
   // Event cards
   // -----------------------------
-  Widget _blueEvent() {
+  Widget _blueEvent(BuildContext context) {
+    final task = Task(
+      title: 'English Class',
+      category: 'Education',
+      date: DateTime.now(),
+      startTime: DateTime.now(),
+      endTime: DateTime.now().add(const Duration(hours: 1, minutes: 30)),
+      notes: '',
+      participants: ['Mom', 'Dad', 'Sister'],
+      reminderEnabled: true,
+    );
+
     return EventCard(
       color: const Color(0xFFE0F2FE),
-      category: 'Education',
-      title: 'English Class',
+      category: task.category,
+      title: task.title,
       timeRange: '8:00 AM - 9:30 AM',
-      participants: [], // no external images, using built-in icons if desired
+      participants: task.participants,
       trailingIcon: Container(
         width: 32,
         height: 32,
@@ -269,17 +307,47 @@ class CalendarScreen extends StatelessWidget {
           child: Icon(Icons.event, size: 18, color: primaryColor),
         ),
       ),
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => EditTaskScreen(
+              initialTask: task,
+              onUpdate: (updated) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Task updated')),
+                );
+              },
+              onDelete: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Task deleted')),
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _purpleEvent() {
+  Widget _purpleEvent(BuildContext context) {
+    final task = Task(
+      title: 'Grocery Run',
+      category: 'Family',
+      date: DateTime.now(),
+      startTime: DateTime.now().add(const Duration(hours: 1)),
+      endTime: DateTime.now().add(const Duration(hours: 1, minutes: 45)),
+      notes: "Dad's turn today",
+      participants: ['Brother'],
+      reminderEnabled: true,
+    );
+
     return EventCard(
       color: const Color(0xFFF3E8FF),
-      category: 'Family',
-      title: 'Grocery Run',
+      category: task.category,
+      title: task.title,
       timeRange: '10:15 AM - 11:00 AM',
-      participants: [], // no external avatars
-      subtitle: "Dad's turn today",
+      participants: task.participants,
+      subtitle: task.notes,
       trailingIcon: Container(
         width: 32,
         height: 32,
@@ -291,6 +359,25 @@ class CalendarScreen extends StatelessWidget {
           child: Icon(Icons.shopping_cart, size: 18, color: primaryColor),
         ),
       ),
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => EditTaskScreen(
+              initialTask: task,
+              onUpdate: (updated) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Task updated')),
+                );
+              },
+              onDelete: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Task deleted')),
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 

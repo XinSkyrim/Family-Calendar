@@ -11,7 +11,6 @@ class NotificationsScreen extends StatelessWidget {
     return Scaffold(
       appBar: _buildAppBar(context),
       body: _buildBody(context),
-      bottomNavigationBar: _buildBottomNav(context),
       backgroundColor: const Color(0xFFFDFBF7),
     );
   }
@@ -178,20 +177,6 @@ class NotificationsScreen extends StatelessWidget {
           trailing: action,
         ),
       ),
-    );
-  }
-
-  Widget _buildBottomNav(BuildContext context) {
-    return BottomNavigationBar(
-      type: BottomNavigationBarType.fixed,
-      currentIndex: 0,
-      items: [
-        BottomNavigationBarItem(icon: const Icon(Icons.calendar_today), label: 'Today'),
-        BottomNavigationBarItem(icon: const Icon(Icons.people), label: 'Family'),
-        BottomNavigationBarItem(icon: const Icon(Icons.chat_bubble_outline), label: 'Chat'),
-        BottomNavigationBarItem(icon: const Icon(Icons.settings), label: 'Settings'),
-      ],
-      onTap: (i) {},
     );
   }
 

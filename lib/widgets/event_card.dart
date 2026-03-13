@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../assets/figma_assets.dart';
+
 class EventCard extends StatelessWidget {
   final Color color;
   final String category;
@@ -8,6 +10,7 @@ class EventCard extends StatelessWidget {
   final List<String> participants;
   final String? subtitle;
   final Widget? trailingIcon;
+  final VoidCallback? onTap;
 
   const EventCard({
     Key? key,
@@ -18,12 +21,13 @@ class EventCard extends StatelessWidget {
     required this.participants,
     this.subtitle,
     this.trailingIcon,
+    this.onTap,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 282,
+    final card = Container(
+      constraints: const BoxConstraints(maxWidth: 282),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: color,
@@ -99,6 +103,14 @@ class EventCard extends StatelessWidget {
         ],
       ),
     );
+
+    if (onTap == null) return card;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(24),
+      onTap: onTap,
+      child: card,
+    );
   }
 
   List<Widget> _buildParticipantAvatars() {
@@ -110,7 +122,7 @@ class EventCard extends StatelessWidget {
         Container(
           width: size,
           height: size,
-          margin: EdgeInsets.only(left: i == 0 ? 0 : -6),
+          margin: EdgeInsets.only(left: i == 0 ? 0 : 0),
           decoration: BoxDecoration(
             color: color.withOpacity(0.1),
             shape: BoxShape.circle,
@@ -122,6 +134,29 @@ class EventCard extends StatelessWidget {
       );
     }
     return widgets;
+  }
+
+  ImageProvider? _tryNetworkImage(String url) {
+    try {
+      return NetworkImage(url);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _participantAvatarUrl(String name) {
+    switch (name) {
+      case 'Mom':
+        return FigmaAssets.familyImgMom;
+      case 'Dad':
+        return FigmaAssets.familyImgDad;
+      case 'Sister':
+        return FigmaAssets.familyImgUncleArthur;
+      case 'Brother':
+        return FigmaAssets.familyImgCousinSarah;
+      default:
+        return FigmaAssets.familyImgMom;
+    }
   }
 
   Color _fadedColorFor(Color c) {
