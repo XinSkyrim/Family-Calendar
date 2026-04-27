@@ -15,11 +15,14 @@ import '../navigation/app_bottom_nav.dart';
 import '../themes/app_theme.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_navigation_bar.dart';
+import '../widgets/onboarding_overlay.dart';
 import 'memo_detail_screen.dart';
 import 'recorded_voice_memo_detail_screen.dart';
 
 class MemoScreen extends StatefulWidget {
-  const MemoScreen({super.key});
+  const MemoScreen({super.key, this.onboardingOverlay});
+
+  final OnboardingOverlayData? onboardingOverlay;
 
   @override
   State<MemoScreen> createState() => _MemoScreenState();
@@ -799,6 +802,8 @@ class _MemoScreenState extends State<MemoScreen>
                   ),
                 ),
               ),
+              if (widget.onboardingOverlay != null)
+                OnboardingOverlay(data: widget.onboardingOverlay!),
             ],
           );
         },

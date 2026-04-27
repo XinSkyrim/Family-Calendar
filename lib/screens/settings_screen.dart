@@ -12,6 +12,7 @@ import '../themes/app_theme.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_navigation_bar.dart';
 import 'login_screen.dart';
+import 'onboarding_flow_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -575,6 +576,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+
+  Future<void> _startOnboardingReplay() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please sign in first.')));
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => OnboardingFlowScreen(userId: currentUser.uid, isReplay: true),
+      ),
+    );
+  }
+
   Widget _buildSettingsList() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -610,6 +629,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   endIndent: 20,
                 ),
                 _buildSettingItem('Family Members', Icons.people),
+                const Divider(
+                  color: Color(0xFFF1F5F9),
+                  height: 1,
+                  indent: 56,
+                  endIndent: 20,
+                ),
+                _buildSettingItem(
+                  'App Tour',
+                  Icons.assistant_navigation,
+                  onTap: _startOnboardingReplay,
+                ),
               ],
             ),
           ),
@@ -656,39 +686,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildSettingItem(String title, IconData icon) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: SettingsScreen.accentColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(48),
-            ),
-            child: Center(
-              child: Icon(icon, size: 16, color: SettingsScreen.accentColor),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: SettingsScreen.primaryColor,
+  Widget _buildSettingItem(String title, IconData icon, {VoidCallback? onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: SettingsScreen.accentColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(48),
+              ),
+              child: Center(
+                child: Icon(icon, size: 16, color: SettingsScreen.accentColor),
               ),
             ),
-          ),
-          const Icon(
-            Icons.arrow_forward_ios,
-            size: 12,
-            color: Color(0xFF64748B),
-          ),
-        ],
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: SettingsScreen.primaryColor,
+                ),
+              ),
+            ),
+            const Icon(
+              Icons.arrow_forward_ios,
+              size: 12,
+              color: Color(0xFF64748B),
+            ),
+          ],
+        ),
       ),
     );
   }
