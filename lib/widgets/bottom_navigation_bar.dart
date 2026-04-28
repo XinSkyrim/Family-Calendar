@@ -9,11 +9,13 @@ import '../themes/app_theme.dart';
 class AppBottomNavigationBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onItemTapped;
+  final Map<int, GlobalKey>? navItemKeys;
 
   const AppBottomNavigationBar({
     Key? key,
     required this.currentIndex,
     required this.onItemTapped,
+    this.navItemKeys,
   }) : super(key: key);
 
   static const List<_NavItem> _navItems = [
@@ -58,6 +60,7 @@ class AppBottomNavigationBar extends StatelessWidget {
     final isSelected = index == currentIndex;
 
     return Material(
+      key: navItemKeys?[index],
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(16),

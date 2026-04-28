@@ -12,9 +12,11 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 import '../navigation/app_bottom_nav.dart';
+import '../services/onboarding_service.dart';
 import '../themes/app_theme.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_navigation_bar.dart';
+import '../widgets/feature_tour_overlay.dart';
 import 'memo_detail_screen.dart';
 import 'recorded_voice_memo_detail_screen.dart';
 
@@ -46,6 +48,12 @@ class _MemoScreenState extends State<MemoScreen>
   Timer? _recordingTimer;
   DateTime? _recordingStartedAt;
   String? _activeRecordingPath;
+  final GlobalKey _textMemoButtonKey = GlobalKey();
+  final GlobalKey _voiceMemoButtonKey = GlobalKey();
+  final GlobalKey _todayNavKey = GlobalKey();
+  int _onboardingIndex = 0;
+  bool _isOnboardingVisible = false;
+  bool _isOnboardingBusy = false;
 
   bool get _isListening => _voiceUi.value.isListening;
   bool get _isVoiceTransitioning => _voiceUi.value.isVoiceTransitioning;
@@ -65,6 +73,9 @@ class _MemoScreenState extends State<MemoScreen>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _maybeStartOnboarding();
+    });
   }
 
   @override
@@ -96,6 +107,129 @@ class _MemoScreenState extends State<MemoScreen>
         SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
       );
   }
+
+  Future<void> _maybeStartOnboarding() async {
+    final state = await OnboardingService.getCurrentState();
+    if (!mounted || state == null || !OnboardingService.shouldStart(state)) {
+      return;
+    }
+
+    if (state.step == OnboardingService.stepCalendarAddFab ||
+        state.step == OnboardingService.stepCompleted) {
+      return;
+    }
+
+    final restoredIndex = _memoTourSteps.indexWhere((step) => step.id == state.step);
+    setState(() {
+      _isOnboardingVisible = true;
+      _onboardingIndex = restoredIndex >= 0 ? restoredIndex : 0;
+    });
+  }
+
+  Future<void> _skipOnboarding() async {
+    if (_isOnboardingBusy) {
+      return;
+    }
+    setState(() {
+      _isOnboardingBusy = true;
+    });
+    await OnboardingService.complete();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _isOnboardingBusy = false;
+      _isOnboardingVisible = false;
+    });
+  }
+
+  Future<void> _completeOnboarding() async {
+    await _skipOnboarding();
+  }
+
+  Future<void> _previousOnboardingStep() async {
+    if (_isOnboardingBusy || _onboardingIndex == 0) {
+      return;
+    }
+
+    final nextIndex = _onboardingIndex - 1;
+    setState(() {
+      _isOnboardingBusy = true;
+    });
+    await OnboardingService.markStep(_memoTourSteps[nextIndex].id);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _onboardingIndex = nextIndex;
+      _isOnboardingBusy = false;
+    });
+  }
+
+  Future<void> _nextOnboardingStep() async {
+    if (_isOnboardingBusy) {
+      return;
+    }
+
+    final currentStep = _memoTourSteps[_onboardingIndex];
+    setState(() {
+      _isOnboardingBusy = true;
+    });
+
+    if (currentStep.id == OnboardingService.stepNavToday) {
+      await OnboardingService.markStep(OnboardingService.stepCalendarAddFab);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isOnboardingBusy = false;
+        _isOnboardingVisible = false;
+      });
+      navigateFromBottomNav(
+        context,
+        targetIndex: 2,
+        currentIndex: _selectedNavIndex,
+      );
+      return;
+    }
+
+    final nextIndex = _onboardingIndex + 1;
+    await OnboardingService.markStep(_memoTourSteps[nextIndex].id);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _onboardingIndex = nextIndex;
+      _isOnboardingBusy = false;
+    });
+  }
+
+  List<FeatureTourStep> get _memoTourSteps => [
+        FeatureTourStep(
+          id: OnboardingService.stepMemoTextButton,
+          targetKey: _textMemoButtonKey,
+          title: 'Create a text memo',
+          description: 'Tap here to write a memo with title and notes.',
+          preferredPlacement: TourBubblePlacement.above,
+          highlightRadius: 28,
+        ),
+        FeatureTourStep(
+          id: OnboardingService.stepMemoVoiceButton,
+          targetKey: _voiceMemoButtonKey,
+          title: 'Record voice memos',
+          description: 'Tap here to quickly capture ideas with your voice.',
+          preferredPlacement: TourBubblePlacement.above,
+          highlightRadius: 28,
+        ),
+        FeatureTourStep(
+          id: OnboardingService.stepNavToday,
+          targetKey: _todayNavKey,
+          title: 'Open your calendar',
+          description: 'Go to Today to see and manage family schedules.',
+          preferredPlacement: TourBubblePlacement.above,
+          highlightRadius: 22,
+        ),
+      ];
 
   void _startVoiceBars() {
     if (!_voiceBarsController.isAnimating) {
@@ -794,6 +928,8 @@ class _MemoScreenState extends State<MemoScreen>
                           bottom: actionBottomOffset,
                           child: _buildBottomActionRow(),
                         ),
+                        if (_isOnboardingVisible)
+                          Positioned.fill(child: _buildOnboardingOverlay()),
                       ],
                     ),
                   ),
@@ -844,6 +980,7 @@ class _MemoScreenState extends State<MemoScreen>
                     bottom: 0,
                     child: AppBottomNavigationBar(
                       currentIndex: _selectedNavIndex,
+                      navItemKeys: {2: _todayNavKey},
                       onItemTapped: (index) {
                         navigateFromBottomNav(
                           context,
@@ -996,6 +1133,7 @@ class _MemoScreenState extends State<MemoScreen>
               children: [
                 _buildMemoActionButton(
                   icon: Icons.edit_note_rounded,
+                  buttonKey: _textMemoButtonKey,
                   semanticLabel: 'Text memo',
                   onTap: _openNewMemo,
                   backgroundColor: Colors.white.withValues(alpha: 0.96),
@@ -1004,6 +1142,7 @@ class _MemoScreenState extends State<MemoScreen>
                 const SizedBox(width: 18),
                 _buildMemoActionButton(
                   icon: Icons.mic_rounded,
+                  buttonKey: _voiceMemoButtonKey,
                   semanticLabel: 'Voice memo',
                   onTap: _startVoiceMemoCreation,
                   backgroundColor: const Color(0xFFFFF4C7),
@@ -1072,6 +1211,7 @@ class _MemoScreenState extends State<MemoScreen>
   }
 
   Widget _buildMemoActionButton({
+    GlobalKey? buttonKey,
     required IconData icon,
     required String semanticLabel,
     required VoidCallback onTap,
@@ -1079,6 +1219,7 @@ class _MemoScreenState extends State<MemoScreen>
     required Color iconColor,
   }) {
     return GestureDetector(
+      key: buttonKey,
       onTap: onTap,
       child: Semantics(
         label: semanticLabel,
@@ -1101,6 +1242,19 @@ class _MemoScreenState extends State<MemoScreen>
           child: Icon(icon, color: iconColor, size: 24),
         ),
       ),
+    );
+  }
+
+  Widget _buildOnboardingOverlay() {
+    return FeatureTourOverlay(
+      step: _memoTourSteps[_onboardingIndex],
+      currentIndex: _onboardingIndex,
+      totalSteps: _memoTourSteps.length,
+      isBusy: _isOnboardingBusy,
+      onPrevious: _onboardingIndex > 0 ? _previousOnboardingStep : null,
+      onNext: _nextOnboardingStep,
+      onSkip: _skipOnboarding,
+      onComplete: _completeOnboarding,
     );
   }
 
