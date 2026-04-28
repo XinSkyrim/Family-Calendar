@@ -72,32 +72,9 @@ class OnboardingOverlay extends StatelessWidget {
             ),
           ),
           SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final cardWidth = constraints.maxWidth - 32;
-                final cardLeft = 16.0;
-                final defaultTop = 12.0;
-                double bubbleTop = defaultTop;
-
-                if (targetRect != null) {
-                  final belowTarget = targetRect.bottom + 12;
-                  final aboveTarget = targetRect.top - 156;
-                  bubbleTop = belowTarget + 156 < constraints.maxHeight
-                      ? belowTarget
-                      : aboveTarget.clamp(defaultTop, constraints.maxHeight - 168);
-                }
-
-                return Stack(
-                  children: [
-                    Positioned(
-                      left: cardLeft,
-                      width: cardWidth,
-                      top: bubbleTop,
-                      child: _buildCoachCard(),
-                    ),
-                  ],
-                );
-              },
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: _buildCoachBubble(),
             ),
           ),
         ],
@@ -127,81 +104,106 @@ class OnboardingOverlay extends StatelessWidget {
     return topLeft & renderObject.size;
   }
 
-  Widget _buildCoachCard() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x22000000),
-            blurRadius: 18,
-            offset: Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                'Step ${data.stepNumber}/${data.totalSteps}',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF64748B),
-                  fontWeight: FontWeight.w700,
-                ),
+  Widget _buildCoachBubble() {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(22),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x22000000),
+                blurRadius: 18,
+                offset: Offset(0, 8),
               ),
-              const Spacer(),
-              TextButton(onPressed: data.onSkip, child: const Text('Skip')),
             ],
           ),
-          Text(
-            data.title,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF0F172A),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            data.description,
-            style: const TextStyle(
-              fontSize: 13,
-              color: Color(0xFF475569),
-              height: 1.4,
-            ),
-          ),
-          if (data.requireTargetTap) ...[
-            const SizedBox(height: 8),
-            const Text(
-              'Please tap the highlighted control to continue.',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF9A6B00),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    'Step ${data.stepNumber}/${data.totalSteps}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF64748B),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(onPressed: data.onSkip, child: const Text('Skip')),
+                ],
               ),
-            ),
-          ] else ...[
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: data.onNext,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFE2B736),
-                  foregroundColor: const Color(0xFF0F172A),
+              Text(
+                data.title,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF0F172A),
                 ),
-                child: Text(data.nextLabel),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                data.description,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF475569),
+                  height: 1.4,
+                ),
+              ),
+              if (data.requireTargetTap) ...[
+                const SizedBox(height: 8),
+                const Text(
+                  'Please tap the highlighted control to continue.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF9A6B00),
+                  ),
+                ),
+              ] else ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: data.onNext,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFE2B736),
+                      foregroundColor: const Color(0xFF0F172A),
+                    ),
+                    child: Text(data.nextLabel),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        Positioned(
+          left: 36,
+          bottom: -10,
+          child: Transform.rotate(
+            angle: 0.785398,
+            child: Container(
+              width: 20,
+              height: 20,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Color(0x12000000),
+                    blurRadius: 4,
+                  ),
+                ],
               ),
             ),
-          ],
-        ],
-      ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -228,6 +230,20 @@ class _OnboardingMaskPainter extends CustomPainter {
       overlay,
       Paint()..color = Colors.black.withOpacity(0.45),
     );
+
+    if (targetRect != null) {
+      final highlight = RRect.fromRectAndRadius(
+        targetRect!.inflate(8),
+        const Radius.circular(16),
+      );
+      canvas.drawRRect(
+        highlight,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3
+          ..color = const Color(0xFFE2B736),
+      );
+    }
   }
 
   @override

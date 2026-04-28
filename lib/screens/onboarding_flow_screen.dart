@@ -28,6 +28,7 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
           'This is your family memo area. You can quickly write things down and keep them organized.',
       nextLabel: 'Start guide',
       page: _OnboardingPage.memo,
+      targetId: 'memo_text_button',
     ),
     _StepCopy(
       key: 'memo_text',
@@ -52,6 +53,7 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
           'Great. Next we will see how to browse dates and add tasks in calendar.',
       nextLabel: 'Go to calendar',
       page: _OnboardingPage.calendar,
+      targetId: 'calendar_date_selector',
     ),
     _StepCopy(
       key: 'calendar_date',
