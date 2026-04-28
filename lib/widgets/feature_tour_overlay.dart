@@ -46,7 +46,7 @@ class FeatureTourOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final targetRect = _resolveTargetRect(step.targetKey);
+    final targetRect = _resolveTargetRect(context, step.targetKey);
     if (targetRect == null) {
       return const SizedBox.shrink();
     }
@@ -86,12 +86,12 @@ class FeatureTourOverlay extends StatelessWidget {
             child: DecoratedBox(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(step.highlightRadius),
-                border: Border.all(color: const Color(0xFFFDE047), width: 2.6),
+                border: Border.all(color: const Color(0xFFF6D25E), width: 2),
                 boxShadow: const [
                   BoxShadow(
-                    color: Color(0x66FDE047),
-                    blurRadius: 18,
-                    spreadRadius: 2,
+                    color: Color(0x4DF6D25E),
+                    blurRadius: 14,
+                    spreadRadius: 1,
                   ),
                 ],
               ),
@@ -118,18 +118,25 @@ class FeatureTourOverlay extends StatelessWidget {
     );
   }
 
-  Rect? _resolveTargetRect(GlobalKey targetKey) {
+  Rect? _resolveTargetRect(BuildContext overlayContext, GlobalKey targetKey) {
     final targetContext = targetKey.currentContext;
     if (targetContext == null) {
       return null;
     }
 
+    final overlayRenderObject = overlayContext.findRenderObject();
     final renderObject = targetContext.findRenderObject();
-    if (renderObject is! RenderBox || !renderObject.attached) {
+    if (overlayRenderObject is! RenderBox ||
+        renderObject is! RenderBox ||
+        !overlayRenderObject.attached ||
+        !renderObject.attached) {
       return null;
     }
 
-    final topLeft = renderObject.localToGlobal(Offset.zero);
+    final topLeft = renderObject.localToGlobal(
+      Offset.zero,
+      ancestor: overlayRenderObject,
+    );
     return Rect.fromLTWH(
       topLeft.dx,
       topLeft.dy,
@@ -150,7 +157,7 @@ class FeatureTourOverlay extends StatelessWidget {
     }
 
     final canPlaceBelow =
-        targetRect.bottom + 16 + bubbleHeightEstimate <= screenSize.height - 24;
+        targetRect.bottom + 12 + bubbleHeightEstimate <= screenSize.height - 16;
 
     return canPlaceBelow ? TourBubblePlacement.below : TourBubblePlacement.above;
   }
@@ -163,12 +170,12 @@ class FeatureTourOverlay extends StatelessWidget {
   }) {
     if (placement == TourBubblePlacement.above) {
       return (targetRect.top - bubbleHeightEstimate - 16)
-          .clamp(24.0, screenHeight - bubbleHeightEstimate - 24)
+          .clamp(16.0, screenHeight - bubbleHeightEstimate - 16)
           .toDouble();
     }
 
-    return (targetRect.bottom + 16)
-        .clamp(24.0, screenHeight - bubbleHeightEstimate - 24)
+    return (targetRect.bottom + 12)
+        .clamp(16.0, screenHeight - bubbleHeightEstimate - 16)
         .toDouble();
   }
 }
@@ -205,6 +212,13 @@ class _TourBubble extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(18),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x260F172A),
+              blurRadius: 18,
+              offset: Offset(0, 8),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -295,7 +309,7 @@ class _TourMaskPainter extends CustomPainter {
 
     canvas.drawPath(
       overlayPath,
-      Paint()..color = const Color(0xB3000000),
+      Paint()..color = const Color(0x99000000),
     );
   }
 
