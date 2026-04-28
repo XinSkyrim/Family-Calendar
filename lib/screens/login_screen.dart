@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'register_screen.dart';
-import 'memo_screen.dart';
+import 'post_login_gate_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -124,7 +124,7 @@ class _LoginScreenState extends State<LoginScreen> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => const MemoScreen(),
+          builder: (_) => const PostLoginGateScreen(),
         ),
       );
     } on FirebaseAuthException catch (e) {

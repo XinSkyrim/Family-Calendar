@@ -11,12 +11,15 @@ import '../navigation/app_bottom_nav.dart';
 import '../themes/app_theme.dart';
 import '../widgets/bottom_navigation_bar.dart';
 import '../widgets/event_card.dart';
+import '../widgets/onboarding_overlay.dart';
 import 'add_task_screen.dart';
 import 'edit_task_screen.dart';
 import 'notifications_screen.dart';
 
 class CalendarScreen extends StatefulWidget {
-  const CalendarScreen({Key? key}) : super(key: key);
+  const CalendarScreen({Key? key, this.onboardingOverlay}) : super(key: key);
+
+  final OnboardingOverlayData? onboardingOverlay;
 
   @override
   State<CalendarScreen> createState() => _CalendarScreenState();
@@ -108,6 +111,21 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   DateTime get _selectedDate => _days[_selectedDayIndex];
 
+  void _handleGuidedTap({
+    required String targetId,
+    required VoidCallback defaultAction,
+  }) {
+    final overlay = widget.onboardingOverlay;
+    if (overlay != null &&
+        overlay.requireTargetTap &&
+        overlay.targetId == targetId) {
+      defaultAction();
+      overlay.onNext();
+      return;
+    }
+    defaultAction();
+  }
+
   @override
   Widget build(BuildContext context) {
     final mediaPadding = MediaQuery.of(context).padding;
@@ -181,6 +199,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
               ),
             ),
           ),
+          if (widget.onboardingOverlay != null)
+            OnboardingOverlay(data: widget.onboardingOverlay!),
         ],
       ),
     );
@@ -344,12 +364,24 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
           return GestureDetector(
             onTap: () {
-              setState(() => _selectedDayIndex = index);
-              _centerSelectedDay();
+              _handleGuidedTap(
+                targetId: 'calendar_date_selector',
+                defaultAction: () {
+                  setState(() => _selectedDayIndex = index);
+                  _centerSelectedDay();
+                },
+              );
             },
             child: Container(
               width: _dateItemWidth,
               padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+              foregroundDecoration:
+                  widget.onboardingOverlay?.targetId == 'calendar_date_selector'
+                  ? BoxDecoration(
+                      border: Border.all(color: accentColor, width: 2.5),
+                      borderRadius: BorderRadius.circular(24),
+                    )
+                  : null,
               decoration: BoxDecoration(
                 color: selected
                     ? const Color(0x22E2B736)
@@ -863,9 +895,21 @@ class _CalendarScreenState extends State<CalendarScreen> {
   Widget _buildFab(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const AddTaskScreen()));
+        final overlay = widget.onboardingOverlay;
+        if (overlay != null &&
+            overlay.requireTargetTap &&
+            overlay.targetId == 'calendar_add_fab') {
+          overlay.onNext();
+          return;
+        }
+        _handleGuidedTap(
+          targetId: 'calendar_add_fab',
+          defaultAction: () {
+            Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const AddTaskScreen()));
+          },
+        );
       },
       child: Container(
         width: 64,
@@ -878,6 +922,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
           ),
           shape: BoxShape.circle,
           boxShadow: [
+            if (widget.onboardingOverlay?.targetId == 'calendar_add_fab')
+              BoxShadow(
+                color: accentColor.withOpacity(0.45),
+                blurRadius: 26,
+                spreadRadius: 2,
+              ),
             BoxShadow(
               color: accentColor.withOpacity(0.3),
               blurRadius: 25,

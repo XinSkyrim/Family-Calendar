@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'firebase_options.dart';
-import 'screens/memo_screen.dart';
+import 'screens/post_login_gate_screen.dart';
 import 'screens/login_screen.dart';
 import 'themes/app_theme.dart';
 
@@ -55,7 +55,7 @@ class AuthGate extends StatelessWidget {
         }
 
         if (snapshot.hasData) {
-          return const MemoScreen();
+          return const PostLoginGateScreen();
         }
 
         return const LoginScreen();

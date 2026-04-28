@@ -15,11 +15,14 @@ import '../navigation/app_bottom_nav.dart';
 import '../themes/app_theme.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_navigation_bar.dart';
+import '../widgets/onboarding_overlay.dart';
 import 'memo_detail_screen.dart';
 import 'recorded_voice_memo_detail_screen.dart';
 
 class MemoScreen extends StatefulWidget {
-  const MemoScreen({super.key});
+  const MemoScreen({super.key, this.onboardingOverlay});
+
+  final OnboardingOverlayData? onboardingOverlay;
 
   @override
   State<MemoScreen> createState() => _MemoScreenState();
@@ -799,6 +802,8 @@ class _MemoScreenState extends State<MemoScreen>
                   ),
                 ),
               ),
+              if (widget.onboardingOverlay != null)
+                OnboardingOverlay(data: widget.onboardingOverlay!),
             ],
           );
         },
@@ -997,21 +1002,50 @@ class _MemoScreenState extends State<MemoScreen>
                 _buildMemoActionButton(
                   icon: Icons.edit_note_rounded,
                   semanticLabel: 'Text memo',
-                  onTap: _openNewMemo,
+                  onTap: () {
+                    _handleGuidedTap(
+                      targetId: 'memo_text_button',
+                      defaultAction: _openNewMemo,
+                    );
+                  },
                   backgroundColor: Colors.white.withValues(alpha: 0.96),
                   iconColor: primaryColor,
+                  isHighlighted:
+                      widget.onboardingOverlay?.targetId == 'memo_text_button',
                 ),
                 const SizedBox(width: 18),
                 _buildMemoActionButton(
                   icon: Icons.mic_rounded,
                   semanticLabel: 'Voice memo',
-                  onTap: _startVoiceMemoCreation,
+                  onTap: () {
+                    _handleGuidedTap(
+                      targetId: 'memo_voice_button',
+                      defaultAction: _startVoiceMemoCreation,
+                    );
+                  },
                   backgroundColor: const Color(0xFFFFF4C7),
                   iconColor: const Color(0xFF9A6B00),
+                  isHighlighted:
+                      widget.onboardingOverlay?.targetId == 'memo_voice_button',
                 ),
               ],
             ),
     );
+  }
+
+
+  Future<void> _handleGuidedTap({
+    required String targetId,
+    required Future<void> Function() defaultAction,
+  }) async {
+    final overlay = widget.onboardingOverlay;
+    if (overlay != null &&
+        overlay.requireTargetTap &&
+        overlay.targetId == targetId) {
+      overlay.onNext();
+      return;
+    }
+    await defaultAction();
   }
 
   Widget _buildRecordButton() {
@@ -1077,6 +1111,7 @@ class _MemoScreenState extends State<MemoScreen>
     required VoidCallback onTap,
     required Color backgroundColor,
     required Color iconColor,
+    bool isHighlighted = false,
   }) {
     return GestureDetector(
       onTap: onTap,
@@ -1089,8 +1124,19 @@ class _MemoScreenState extends State<MemoScreen>
           decoration: BoxDecoration(
             color: backgroundColor,
             shape: BoxShape.circle,
-            border: Border.all(color: Colors.white.withValues(alpha: 0.86)),
+            border: Border.all(
+              color: isHighlighted
+                  ? accentColor
+                  : Colors.white.withValues(alpha: 0.86),
+              width: isHighlighted ? 3 : 1,
+            ),
             boxShadow: [
+              if (isHighlighted)
+                BoxShadow(
+                  color: accentColor.withValues(alpha: 0.35),
+                  blurRadius: 18,
+                  spreadRadius: 2,
+                ),
               BoxShadow(
                 color: const Color(0xFF0F172A).withValues(alpha: 0.08),
                 blurRadius: 18,
