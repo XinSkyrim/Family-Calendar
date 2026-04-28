@@ -43,6 +43,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
   static const _dateHorizontalPadding = 16.0;
 
   final ScrollController _dateScrollController = ScrollController();
+  final GlobalKey _dateSelectorKey = GlobalKey(debugLabel: 'calendarDateSelector');
+  final GlobalKey _fabKey = GlobalKey(debugLabel: 'calendarAddFab');
   Stream<QuerySnapshot<Map<String, dynamic>>>? _eventsStream;
   List<_CalendarEvent> _cachedEvents = <_CalendarEvent>[];
   int _selectedNavIndex = 2;
@@ -126,8 +128,24 @@ class _CalendarScreenState extends State<CalendarScreen> {
     defaultAction();
   }
 
+  OnboardingOverlayData? _resolvedOnboardingOverlay() {
+    final overlay = widget.onboardingOverlay;
+    if (overlay == null) {
+      return null;
+    }
+    switch (overlay.targetId) {
+      case 'calendar_date_selector':
+        return overlay.copyWith(targetKey: _dateSelectorKey);
+      case 'calendar_add_fab':
+        return overlay.copyWith(targetKey: _fabKey);
+      default:
+        return overlay;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final resolvedOnboardingOverlay = _resolvedOnboardingOverlay();
     final mediaPadding = MediaQuery.of(context).padding;
     final statusBarHeight = mediaPadding.top;
     final bottomInset = mediaPadding.bottom;
@@ -199,8 +217,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
               ),
             ),
           ),
-          if (widget.onboardingOverlay != null)
-            OnboardingOverlay(data: widget.onboardingOverlay!),
+          if (resolvedOnboardingOverlay != null)
+            OnboardingOverlay(data: resolvedOnboardingOverlay),
         ],
       ),
     );
@@ -351,6 +369,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   Widget _buildDateSelector() {
     return SizedBox(
+      key: _dateSelectorKey,
       height: 90,
       child: ListView.separated(
         controller: _dateScrollController,
@@ -912,6 +931,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         );
       },
       child: Container(
+        key: _fabKey,
         width: 64,
         height: 64,
         decoration: BoxDecoration(

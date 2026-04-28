@@ -40,6 +40,10 @@ class _MemoScreenState extends State<MemoScreen>
       'No notes yet. Tap to add notes for this voice memo.';
 
   final int _selectedNavIndex = 0;
+  final GlobalKey _textMemoButtonKey = GlobalKey(debugLabel: 'memoTextButton');
+  final GlobalKey _voiceMemoButtonKey = GlobalKey(
+    debugLabel: 'memoVoiceButton',
+  );
   String? _deleteActionMemoId;
   String? _deletingMemoId;
   final AudioRecorder _audioRecorder = AudioRecorder();
@@ -756,6 +760,7 @@ class _MemoScreenState extends State<MemoScreen>
 
   @override
   Widget build(BuildContext context) {
+    final resolvedOnboardingOverlay = _resolvedOnboardingOverlay();
     final mediaPadding = MediaQuery.of(context).padding;
     final statusBarHeight = mediaPadding.top;
     final bottomInset = mediaPadding.bottom;
@@ -802,8 +807,8 @@ class _MemoScreenState extends State<MemoScreen>
                   ),
                 ),
               ),
-              if (widget.onboardingOverlay != null)
-                OnboardingOverlay(data: widget.onboardingOverlay!),
+              if (resolvedOnboardingOverlay != null)
+                OnboardingOverlay(data: resolvedOnboardingOverlay),
             ],
           );
         },
@@ -1012,6 +1017,7 @@ class _MemoScreenState extends State<MemoScreen>
                   iconColor: primaryColor,
                   isHighlighted:
                       widget.onboardingOverlay?.targetId == 'memo_text_button',
+                  widgetKey: _textMemoButtonKey,
                 ),
                 const SizedBox(width: 18),
                 _buildMemoActionButton(
@@ -1027,6 +1033,7 @@ class _MemoScreenState extends State<MemoScreen>
                   iconColor: const Color(0xFF9A6B00),
                   isHighlighted:
                       widget.onboardingOverlay?.targetId == 'memo_voice_button',
+                  widgetKey: _voiceMemoButtonKey,
                 ),
               ],
             ),
@@ -1046,6 +1053,21 @@ class _MemoScreenState extends State<MemoScreen>
       return;
     }
     await defaultAction();
+  }
+
+  OnboardingOverlayData? _resolvedOnboardingOverlay() {
+    final overlay = widget.onboardingOverlay;
+    if (overlay == null) {
+      return null;
+    }
+    switch (overlay.targetId) {
+      case 'memo_text_button':
+        return overlay.copyWith(targetKey: _textMemoButtonKey);
+      case 'memo_voice_button':
+        return overlay.copyWith(targetKey: _voiceMemoButtonKey);
+      default:
+        return overlay;
+    }
   }
 
   Widget _buildRecordButton() {
@@ -1112,6 +1134,7 @@ class _MemoScreenState extends State<MemoScreen>
     required Color backgroundColor,
     required Color iconColor,
     bool isHighlighted = false,
+    Key? widgetKey,
   }) {
     return GestureDetector(
       onTap: onTap,
@@ -1119,6 +1142,7 @@ class _MemoScreenState extends State<MemoScreen>
         label: semanticLabel,
         button: true,
         child: Container(
+          key: widgetKey,
           width: 56,
           height: 56,
           decoration: BoxDecoration(
