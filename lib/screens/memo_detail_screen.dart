@@ -237,17 +237,17 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
     final body = _bodyController.text.trim();
 
     if (user == null) {
-      _showMessage('Please sign in to save your memo.');
+      _showMessage('Please sign in to save your note.');
       return null;
     }
 
     if (title.isEmpty && body.isEmpty) {
-      _showMessage('Please enter your memo first.');
+      _showMessage('Please enter your note first.');
       return null;
     }
 
     if (title.length > _maxTitleLength) {
-      _showMessage('Memo title cannot exceed $_maxTitleLength characters.');
+      _showMessage('Note title cannot exceed $_maxTitleLength characters.');
       return null;
     }
 
@@ -298,12 +298,12 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
             ..hideCurrentSnackBar()
             ..showSnackBar(
               const SnackBar(
-                content: Text('Memo saved.'),
+                content: Text('Note saved.'),
                 behavior: SnackBarBehavior.floating,
               ),
             );
         } else if (showSuccessMessage) {
-          _showMessage('Memo saved.');
+          _showMessage('Note saved.');
         }
 
         return _SavedMemo(memoId: docRef.id, title: effectiveTitle, body: body);
@@ -334,7 +334,7 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
       }
 
       if (showSuccessMessage) {
-        _showMessage('Memo updated.');
+        _showMessage('Note updated.');
       }
 
       return _SavedMemo(
@@ -343,7 +343,7 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
         body: body,
       );
     } catch (_) {
-      _showMessage('Failed to save memo. Please try again.');
+      _showMessage('Failed to save note. Please try again.');
       return null;
     } finally {
       if (mounted) {
@@ -406,7 +406,7 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
   String _fallbackTitle(String body) {
     final trimmedBody = body.trim();
     if (trimmedBody.isEmpty) {
-      return 'Untitled Memo';
+      return 'Untitled Note';
     }
 
     final firstLine = trimmedBody.split('\n').first.trim();
@@ -448,7 +448,7 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
     final memoBody = savedMemo.body.trim();
 
     if (memoTitle.isEmpty && memoBody.isEmpty) {
-      _showMessage('This memo is empty.');
+      _showMessage('This note is empty.');
       return;
     }
 
@@ -906,7 +906,7 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
           Expanded(
             child: Center(
               child: Text(
-                _isCreatingMode ? 'New Memo' : 'Memo Detail',
+                _isCreatingMode ? 'New Note' : 'Note Detail',
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
@@ -1050,7 +1050,7 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
           textInputAction: TextInputAction.next,
           onTapOutside: (_) => _dismissKeyboard(),
           decoration: InputDecoration(
-            hintText: 'Memo title',
+            hintText: 'Note title',
             border: InputBorder.none,
             isCollapsed: true,
             counterText: '',
@@ -1084,7 +1084,7 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
                 ),
               ),
               decoration: const InputDecoration(
-                hintText: 'Write your memo here...',
+                hintText: 'Write your note here...',
                 border: InputBorder.none,
                 isCollapsed: true,
               ),

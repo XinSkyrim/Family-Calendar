@@ -13,11 +13,9 @@ import 'package:record/record.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../navigation/app_bottom_nav.dart';
-import '../services/onboarding_service.dart';
 import '../themes/app_theme.dart';
-import '../widgets/app_header.dart';
+import '../widgets/app_today_top_bar.dart';
 import '../widgets/bottom_navigation_bar.dart';
-import '../widgets/feature_tour_overlay.dart';
 import 'memo_detail_screen.dart';
 import 'recorded_voice_memo_detail_screen.dart';
 
@@ -37,7 +35,7 @@ class _MemoScreenState extends State<MemoScreen>
   static const borderColor = Color.fromRGBO(236, 91, 19, 0.05);
   static const int _cardTitleLimit = 20;
   static const String _voiceMemoEmptyNotePreview =
-      'No notes yet. Tap to add notes for this voice memo.';
+      'No notes yet. Tap to add notes for this voice note.';
 
   final int _selectedNavIndex = 0;
   String? _deleteActionMemoId;
@@ -49,12 +47,6 @@ class _MemoScreenState extends State<MemoScreen>
   Timer? _recordingTimer;
   DateTime? _recordingStartedAt;
   String? _activeRecordingPath;
-  final GlobalKey _textMemoButtonKey = GlobalKey();
-  final GlobalKey _voiceMemoButtonKey = GlobalKey();
-  final GlobalKey _todayNavKey = GlobalKey();
-  int _onboardingIndex = 0;
-  bool _isOnboardingVisible = false;
-  bool _isOnboardingBusy = false;
 
   bool get _isListening => _voiceUi.value.isListening;
   bool get _isVoiceTransitioning => _voiceUi.value.isVoiceTransitioning;
@@ -74,9 +66,6 @@ class _MemoScreenState extends State<MemoScreen>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _maybeStartOnboarding();
-    });
   }
 
   @override
@@ -110,153 +99,6 @@ class _MemoScreenState extends State<MemoScreen>
       );
   }
 
-  Future<void> _maybeStartOnboarding() async {
-    final state = await OnboardingService.getCurrentState();
-    if (!mounted || state == null || !OnboardingService.shouldStart(state)) {
-      return;
-    }
-
-    if (state.step == OnboardingService.stepCalendarAddFab ||
-        state.step == OnboardingService.stepCompleted) {
-      return;
-    }
-
-    final restoredIndex = _memoTourSteps.indexWhere((step) => step.id == state.step);
-    final targetIndex = restoredIndex >= 0 ? restoredIndex : 0;
-    final isTargetReady = await _waitForTargetReady(_memoTourSteps[targetIndex].targetKey);
-    if (!mounted || !isTargetReady) {
-      return;
-    }
-
-    setState(() {
-      _isOnboardingVisible = true;
-      _onboardingIndex = targetIndex;
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_isOnboardingVisible) {
-        return;
-      }
-      setState(() {});
-    });
-  }
-
-  Future<bool> _waitForTargetReady(GlobalKey key) async {
-    for (int i = 0; i < 12; i++) {
-      if (!mounted) {
-        return false;
-      }
-      if (key.currentContext != null) {
-        return true;
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 16));
-    }
-    return key.currentContext != null;
-  }
-
-  Future<void> _skipOnboarding() async {
-    if (_isOnboardingBusy) {
-      return;
-    }
-    setState(() {
-      _isOnboardingBusy = true;
-    });
-    await OnboardingService.complete();
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _isOnboardingBusy = false;
-      _isOnboardingVisible = false;
-    });
-  }
-
-  Future<void> _completeOnboarding() async {
-    await _skipOnboarding();
-  }
-
-  Future<void> _previousOnboardingStep() async {
-    if (_isOnboardingBusy || _onboardingIndex == 0) {
-      return;
-    }
-
-    final nextIndex = _onboardingIndex - 1;
-    setState(() {
-      _isOnboardingBusy = true;
-    });
-    await OnboardingService.markStep(_memoTourSteps[nextIndex].id);
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _onboardingIndex = nextIndex;
-      _isOnboardingBusy = false;
-    });
-  }
-
-  Future<void> _nextOnboardingStep() async {
-    if (_isOnboardingBusy) {
-      return;
-    }
-
-    final currentStep = _memoTourSteps[_onboardingIndex];
-    setState(() {
-      _isOnboardingBusy = true;
-    });
-
-    if (currentStep.id == OnboardingService.stepNavToday) {
-      await OnboardingService.markStep(OnboardingService.stepCalendarAddFab);
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _isOnboardingBusy = false;
-        _isOnboardingVisible = false;
-      });
-      navigateFromBottomNav(
-        context,
-        targetIndex: 2,
-        currentIndex: _selectedNavIndex,
-      );
-      return;
-    }
-
-    final nextIndex = _onboardingIndex + 1;
-    await OnboardingService.markStep(_memoTourSteps[nextIndex].id);
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _onboardingIndex = nextIndex;
-      _isOnboardingBusy = false;
-    });
-  }
-
-  List<FeatureTourStep> get _memoTourSteps => [
-        FeatureTourStep(
-          id: OnboardingService.stepMemoTextButton,
-          targetKey: _textMemoButtonKey,
-          title: 'Create a text memo',
-          description: 'Tap here to write a memo with title and notes.',
-          preferredPlacement: TourBubblePlacement.above,
-          highlightRadius: 28,
-        ),
-        FeatureTourStep(
-          id: OnboardingService.stepMemoVoiceButton,
-          targetKey: _voiceMemoButtonKey,
-          title: 'Record voice memos',
-          description: 'Tap here to quickly capture ideas with your voice.',
-          preferredPlacement: TourBubblePlacement.above,
-          highlightRadius: 28,
-        ),
-        FeatureTourStep(
-          id: OnboardingService.stepNavToday,
-          targetKey: _todayNavKey,
-          title: 'Open your calendar',
-          description: 'Go to Today to see and manage family schedules.',
-          preferredPlacement: TourBubblePlacement.above,
-          highlightRadius: 22,
-        ),
-      ];
 
   void _startVoiceBars() {
     if (!_voiceBarsController.isAnimating) {
@@ -457,7 +299,7 @@ class _MemoScreenState extends State<MemoScreen>
 
     if (user == null) {
       _resetVoiceOverlay();
-      _showMessage('Please sign in to create a memo.');
+      _showMessage('Please sign in to create a note.');
       return;
     }
 
@@ -521,7 +363,7 @@ class _MemoScreenState extends State<MemoScreen>
 
       if (uploadFailed) {
         _showMessage(
-          'Voice memo saved locally. Audio upload will need to be retried later.',
+          'Voice note saved locally. Audio upload will need to be retried later.',
         );
       }
 
@@ -546,17 +388,17 @@ class _MemoScreenState extends State<MemoScreen>
 
       _updateVoiceUi((current) => current.copyWith(isCreatingVoiceMemo: false));
       _resetVoiceOverlay();
-      _showMessage('Failed to create recorded memo. Please try again.');
+      _showMessage('Failed to create recorded note. Please try again.');
     }
   }
 
   static String _voiceMemoAutoTitle(DateTime createdAt) {
-    return '${DateFormat('d MMMM yyyy').format(createdAt.toLocal())} recording';
+    return '${DateFormat('d MMMM yyyy').format(createdAt.toLocal())} voice note';
   }
 
   static bool _isUnsetVoiceTitle(String title) {
     final normalized = title.trim();
-    return normalized.isEmpty || normalized == 'Voice Memo';
+    return normalized.isEmpty || normalized == 'Voice Note';
   }
 
   Stream<List<MemoRecord>> _memoStream() {
@@ -635,7 +477,12 @@ class _MemoScreenState extends State<MemoScreen>
     if (difference == 1) {
       return 'Yesterday';
     }
-    return DateFormat('d MMMM yyyy').format(localDate);
+
+    if (now.year == localDate.year && now.month == localDate.month) {
+      return DateFormat('d MMMM yyyy').format(localDate);
+    }
+
+    return DateFormat('MMMM yyyy').format(localDate);
   }
 
   Future<void> _confirmAndDeleteMemo(_MemoItem item) async {
@@ -685,7 +532,7 @@ class _MemoScreenState extends State<MemoScreen>
         ..hideCurrentSnackBar()
         ..showSnackBar(
           const SnackBar(
-            content: Text('Memo deleted.'),
+            content: Text('Note deleted.'),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -698,7 +545,7 @@ class _MemoScreenState extends State<MemoScreen>
         ..hideCurrentSnackBar()
         ..showSnackBar(
           const SnackBar(
-            content: Text('Failed to delete memo. Please try again.'),
+            content: Text('Failed to delete note. Please try again.'),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -772,7 +619,7 @@ class _MemoScreenState extends State<MemoScreen>
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'Delete this memo?',
+                  'Delete this note?',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 20,
@@ -963,8 +810,6 @@ class _MemoScreenState extends State<MemoScreen>
                           bottom: actionBottomOffset,
                           child: _buildBottomActionRow(),
                         ),
-                        if (_isOnboardingVisible)
-                          Positioned.fill(child: _buildOnboardingOverlay()),
                       ],
                     ),
                   ),
@@ -1015,7 +860,6 @@ class _MemoScreenState extends State<MemoScreen>
                     bottom: 0,
                     child: AppBottomNavigationBar(
                       currentIndex: _selectedNavIndex,
-                      navItemKeys: {2: _todayNavKey},
                       onItemTapped: (index) {
                         navigateFromBottomNav(
                           context,
@@ -1035,7 +879,9 @@ class _MemoScreenState extends State<MemoScreen>
   }
 
   Widget _buildHeader() {
-    return const AppHeader(title: 'Memos', useBlur: false);
+    return AppTodayTopBar(
+      title: DateFormat('d MMMM').format(DateTime.now()),
+    );
   }
 
   Widget _buildContent() {
@@ -1051,7 +897,7 @@ class _MemoScreenState extends State<MemoScreen>
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 32),
               child: Text(
-                'Unable to load memos right now.',
+                'Unable to load notes right now.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Color(0xFF64748B),
@@ -1070,7 +916,7 @@ class _MemoScreenState extends State<MemoScreen>
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 32),
               child: Text(
-                'Please sign in to view your memos.',
+                'Please sign in to view your notes.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Color(0xFF64748B),
@@ -1089,7 +935,7 @@ class _MemoScreenState extends State<MemoScreen>
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 32),
               child: Text(
-                'No memos yet. Use the center record button or the note button to create one.',
+                'No notes yet. Use the center record button or the note button to create one.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Color(0xFF94A3B8),
@@ -1168,8 +1014,7 @@ class _MemoScreenState extends State<MemoScreen>
               children: [
                 _buildMemoActionButton(
                   icon: Icons.edit_note_rounded,
-                  buttonKey: _textMemoButtonKey,
-                  semanticLabel: 'Text memo',
+                  semanticLabel: 'Text note',
                   onTap: _openNewMemo,
                   backgroundColor: Colors.white.withValues(alpha: 0.96),
                   iconColor: primaryColor,
@@ -1177,8 +1022,7 @@ class _MemoScreenState extends State<MemoScreen>
                 const SizedBox(width: 18),
                 _buildMemoActionButton(
                   icon: Icons.mic_rounded,
-                  buttonKey: _voiceMemoButtonKey,
-                  semanticLabel: 'Voice memo',
+                  semanticLabel: 'Voice note',
                   onTap: _startVoiceMemoCreation,
                   backgroundColor: const Color(0xFFFFF4C7),
                   iconColor: const Color(0xFF9A6B00),
@@ -1277,19 +1121,6 @@ class _MemoScreenState extends State<MemoScreen>
           child: Icon(icon, color: iconColor, size: 24),
         ),
       ),
-    );
-  }
-
-  Widget _buildOnboardingOverlay() {
-    return FeatureTourOverlay(
-      step: _memoTourSteps[_onboardingIndex],
-      currentIndex: _onboardingIndex,
-      totalSteps: 4,
-      isBusy: _isOnboardingBusy,
-      onPrevious: _onboardingIndex > 0 ? _previousOnboardingStep : null,
-      onNext: _nextOnboardingStep,
-      onSkip: _skipOnboarding,
-      onComplete: _completeOnboarding,
     );
   }
 
@@ -1443,7 +1274,7 @@ class _MemoScreenState extends State<MemoScreen>
               ),
               const SizedBox(width: 8),
               Text(
-                _isRecordingSessionActive ? 'Recording audio' : 'Voice memo',
+                _isRecordingSessionActive ? 'Recording audio' : 'Voice note',
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w800,
@@ -1621,7 +1452,7 @@ class MemoRecord {
 
     final trimmedBody = body.trim();
     if (trimmedBody.isEmpty) {
-      return isVoiceMemo ? 'Voice Memo' : 'Untitled Memo';
+      return isVoiceMemo ? 'Voice Note' : 'Untitled Note';
     }
 
     final firstLine = trimmedBody.split('\n').first.trim();
@@ -1727,36 +1558,30 @@ class _MemoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isVoice = item.isVoiceMemo;
-    final cardColor = isVoice ? const Color(0xFFFFF8E3) : Colors.white;
-    final borderColor = isVoice
-        ? const Color(0x33E2B736)
-        : _MemoScreenState.borderColor;
+    final cardColor = Colors.white;
+    final borderColor = _MemoScreenState.borderColor;
     final previewText = item.body.trim().isNotEmpty
         ? item.body
         : (isVoice ? _MemoScreenState._voiceMemoEmptyNotePreview : '');
     final icon = isVoice ? Icons.mic_rounded : Icons.edit_note_rounded;
-    final iconColor = isVoice
-        ? const Color(0xFF9A6B00)
-        : _MemoScreenState.primaryColor;
-    final iconBackground = isVoice
-        ? Colors.white.withValues(alpha: 0.78)
-        : AppTheme.lightBackground.withValues(alpha: 0.72);
+    final iconColor = _MemoScreenState.accentColor;
+    final iconBackground = _MemoScreenState.accentColor.withOpacity(0.1);
 
     final card = Container(
+      constraints: const BoxConstraints(minHeight: 100),
       decoration: BoxDecoration(
         color: cardColor,
         border: Border.all(color: borderColor),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: (isVoice ? _MemoScreenState.accentColor : Colors.black)
-                .withValues(alpha: isVoice ? 0.1 : 0.05),
-            blurRadius: isVoice ? 18 : 2,
-            offset: Offset(0, isVoice ? 8 : 1),
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 2,
+            offset: const Offset(0, 1),
           ),
         ],
       ),
-      padding: const EdgeInsets.all(21),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1796,16 +1621,16 @@ class _MemoCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
             previewText,
-            maxLines: 2,
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w400,
               color: Color(0xFF64748B),
-              height: 1.6,
+              height: 1.4,
             ),
           ),
         ],

@@ -21,7 +21,7 @@ class VoiceMemoSummary {
     return VoiceMemoSummary(
       title: (map['title'] as String?)?.trim().isNotEmpty == true
           ? (map['title'] as String).trim()
-          : 'Untitled memo',
+          : 'Untitled note',
       summary: (map['summary'] as String?)?.trim() ?? '',
       detailedSummary: (map['detailedSummary'] as String?)?.trim() ?? '',
       keyPoints: (map['keyPoints'] as List<dynamic>? ?? const [])
@@ -36,7 +36,7 @@ class VoiceMemoSummary {
           .toList(),
       category: (map['category'] as String?)?.trim().isNotEmpty == true
           ? (map['category'] as String).trim()
-          : 'Memo',
+          : 'Note',
     );
   }
 

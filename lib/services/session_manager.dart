@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'user_profile_service.dart';
 
 class SessionManager {
   static const String _lastActiveKey = 'last_active_at';
@@ -50,6 +51,7 @@ class SessionManager {
 
   static Future<void> signOutCompletely() async {
     await clearSession();
+    await UserProfileService.clear();
 
     try {
       await GoogleSignIn().signOut();

@@ -6,9 +6,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../navigation/app_bottom_nav.dart';
 import '../services/session_manager.dart';
+import '../services/user_profile_service.dart';
 import '../themes/app_theme.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_navigation_bar.dart';
@@ -53,63 +55,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadUserInfo() async {
     try {
-      final currentUser = FirebaseAuth.instance.currentUser;
-
-      if (currentUser == null) {
-        if (!mounted) return;
-        setState(() {
-          _isLoading = false;
-        });
-        return;
-      }
-
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUser.uid)
-          .get();
-
-      String fullName = 'User';
-      String photoURL = '';
-      String familyName = 'No Family';
-
-      if (userDoc.exists) {
-        final data = userDoc.data();
-
-        if (data != null) {
-          final username = (data['username'] ?? '').toString().trim();
-          final fullNameFromDb = (data['fullName'] ?? '').toString().trim();
-
-          if (username.isNotEmpty) {
-            fullName = username;
-          } else if (fullNameFromDb.isNotEmpty) {
-            fullName = fullNameFromDb;
-          } else {
-            fullName = 'User';
-          }
-
-          photoURL = (data['photoURL'] ?? '').toString().trim();
-        }
-      }
-
-      final familySnapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUser.uid)
-          .collection('families')
-          .limit(1)
-          .get();
-
-      if (familySnapshot.docs.isNotEmpty) {
-        final familyData = familySnapshot.docs.first.data();
-        familyName =
-            (familyData['familyName'] ?? familyData['name'] ?? 'My Family')
-                .toString();
-      }
-
+      final profile = UserProfileService.profile.value;
       if (!mounted) return;
       setState(() {
-        _fullName = fullName;
-        _photoURL = photoURL;
-        _familyName = familyName;
+        _fullName = profile.fullName;
+        _photoURL = profile.photoUrl;
         _isLoading = false;
       });
     } catch (e) {
@@ -282,6 +232,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _isUploadingPhoto = false;
       });
 
+      await UserProfileService.update(photoUrl: avatarUrl);
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Avatar updated successfully')),
       );
@@ -367,6 +319,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _isUploadingPhoto = false;
       });
 
+      await UserProfileService.update(photoUrl: downloadUrl);
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Avatar updated successfully')),
       );
@@ -384,59 +338,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final statusBarHeight = MediaQuery.of(context).padding.top;
-
     return Scaffold(
       backgroundColor: SettingsScreen.bgColor,
-      body: Stack(
-        children: [
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: statusBarHeight,
-            child: const ColoredBox(color: AppTheme.headerBackground),
-          ),
-          SafeArea(
-            bottom: false,
-            child: Stack(
+      body: SafeArea(
+        bottom: false,
+        child: Stack(
+          children: [
+            Column(
               children: [
-                Column(
-                  children: [
-                    const AppHeader(title: 'Settings', useBlur: false),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        child: Column(
-                          children: [
-                            _buildProfileSection(),
-                            _buildSettingsList(),
-                            _buildLogOutButton(context),
-                            const SizedBox(height: 96),
-                          ],
-                        ),
-                      ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        _buildProfileSection(),
+                        _buildSettingsList(),
+                        _buildLogOutButton(context),
+                        const SizedBox(height: 96),
+                      ],
                     ),
-                  ],
-                ),
-                Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  child: AppBottomNavigationBar(
-                    currentIndex: 3,
-                    onItemTapped: (index) {
-                      navigateFromBottomNav(
-                        context,
-                        targetIndex: index,
-                        currentIndex: 3,
-                      );
-                    },
                   ),
                 ),
               ],
             ),
-          ),
-        ],
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: AppBottomNavigationBar(
+                currentIndex: 3,
+                onItemTapped: (index) {
+                  navigateFromBottomNav(
+                    context,
+                    targetIndex: index,
+                    currentIndex: 3,
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -463,28 +403,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     color: const Color(0xFFE8B4A8),
                   ),
                   child: ClipOval(
-                    child: _isLoading
-                        ? const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                        : Stack(
+                        child: _isLoading
+                            ? const Center(
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : Stack(
                       fit: StackFit.expand,
                       children: [
                         _photoURL.isNotEmpty
-                            ? Image.network(
-                          _photoURL,
-                          fit: BoxFit.cover,
-                          errorBuilder:
-                              (context, error, stackTrace) {
-                            return const Center(
-                              child: Icon(
-                                Icons.person,
-                                size: 60,
-                                color: Colors.white,
-                              ),
-                            );
-                          },
-                        )
+                                ? CachedNetworkImage(
+                                    imageUrl: _photoURL,
+                                    fit: BoxFit.cover,
+                                    placeholder: (context, url) => Container(
+                                      color: const Color(0xFFE8B4A8),
+                                    ),
+                                    errorWidget: (context, url, error) {
+                                      return const Center(
+                                        child: Icon(
+                                          Icons.person,
+                                          size: 60,
+                                          color: Colors.white,
+                                        ),
+                                      );
+                                    },
+                                  )
                             : const Center(
                           child: Icon(
                             Icons.person,

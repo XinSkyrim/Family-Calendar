@@ -64,7 +64,7 @@ class _VoiceMemoScreenState extends State<VoiceMemoScreen>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please sign in to use voice memo.')),
+          const SnackBar(content: Text('Please sign in to use voice notes.')),
         );
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -291,11 +291,11 @@ class _VoiceMemoScreenState extends State<VoiceMemoScreen>
         _inputController.clear();
         _activeInputMode = 'text';
       });
-      _showMessage('Memo summarized and saved.');
+      _showMessage('Voice note summarized and saved.');
     } on FirebaseFunctionsException catch (error) {
       _showMessage(_mapFunctionError(error));
     } catch (_) {
-      _showMessage('Failed to save memo. Please try again.');
+      _showMessage('Failed to save note. Please try again.');
     } finally {
       if (mounted) {
         setState(() {
@@ -310,7 +310,7 @@ class _VoiceMemoScreenState extends State<VoiceMemoScreen>
       case 'unauthenticated':
         return 'Please sign in to continue.';
       case 'invalid-argument':
-        return 'Please provide valid memo content.';
+        return 'Please provide valid note content.';
       case 'resource-exhausted':
         return 'Too many requests. Please wait a few seconds.';
       default:
@@ -416,7 +416,7 @@ class _VoiceMemoScreenState extends State<VoiceMemoScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'AI Voice Memo',
+              'AI Voice Note',
               style: TextStyle(
                 color: primaryColor,
                 fontSize: 28,
@@ -490,7 +490,7 @@ class _VoiceMemoScreenState extends State<VoiceMemoScreen>
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Text(
-                _isListening ? 'Listening...' : 'Ready for your memo',
+                _isListening ? 'Listening...' : 'Ready for your voice note',
                 style: TextStyle(
                   color: _isListening ? accentColor : const Color(0xFF64748B),
                   fontSize: 12,
@@ -730,7 +730,7 @@ class _MemoCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    memo.inputMode == 'voice' ? 'Voice memo' : 'Text memo',
+                    memo.inputMode == 'voice' ? 'Voice note' : 'Text note',
                     style: const TextStyle(
                       color: Color(0xFFA1A1AA),
                       fontSize: 13,

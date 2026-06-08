@@ -23,7 +23,7 @@ class FamilyScreen extends StatefulWidget {
 }
 
 class _FamilyScreenState extends State<FamilyScreen> {
-  int _selectedNavIndex = 1;
+  int _selectedNavIndex = 2;
   late Future<List<Map<String, dynamic>>> _membersFuture;
 
   final TextEditingController _inviteEmailController = TextEditingController();

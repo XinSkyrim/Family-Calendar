@@ -48,6 +48,7 @@ dependencies:
   just_audio: ^0.10.5
   path_provider: ^2.1.5
   shared_preferences: ^2.5.5
+  cached_network_image: ^3.2.4
   google_sign_in: ^6.2.2
   wakelock_plus: ^1.6.0
 
@@ -67,7 +68,7 @@ dev_dependencies:
 flutter_icons:
   android: true
   ios: true
-  image_path: "assets/images/family_memo_app_logo.png"
+  image_path: "assets/images/cottage_logo_2048.png"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

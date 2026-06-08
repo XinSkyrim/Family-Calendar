@@ -19,14 +19,15 @@ class AppBottomNavigationBar extends StatelessWidget {
   }) : super(key: key);
 
   static const List<_NavItem> _navItems = [
-    _NavItem(icon: Icons.chat_bubble_outline, label: 'Memo'),
+    _NavItem(icon: Icons.chat_bubble_outline, label: 'Notes'),
+    _NavItem(icon: Icons.calendar_today, label: 'Calendar'),
     _NavItem(icon: Icons.people, label: 'Group'),
-    _NavItem(icon: Icons.calendar_today, label: 'Today'),
     _NavItem(icon: Icons.settings, label: 'Settings'),
   ];
 
   @override
   Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewPadding.bottom;
     return ClipRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(
@@ -34,9 +35,14 @@ class AppBottomNavigationBar extends StatelessWidget {
           sigmaY: AppTheme.blurSigma,
         ),
         child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 25,
-            vertical: AppTheme.verticalPadding,
+          padding: EdgeInsets.fromLTRB(
+            25,
+            AppTheme.verticalPadding,
+            25,
+            AppTheme.verticalPadding + bottomInset,
+          ),
+          constraints: BoxConstraints(
+            minHeight: AppTheme.bottomNavHeight + bottomInset,
           ),
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.8),
@@ -62,23 +68,30 @@ class AppBottomNavigationBar extends StatelessWidget {
 
     return GestureDetector(
       key: navItemKeys?[index],
+      behavior: HitTestBehavior.translucent,
       onTap: () => onItemTapped(index),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            item.icon,
-            size: 20,
-            color: isSelected ? AppTheme.accent : AppTheme.inactiveIcon,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            item.label,
-            style: isSelected
-                ? AppTheme.navLabelSelectedStyle
-                : AppTheme.navLabelStyle,
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          vertical: 10,
+          horizontal: 8,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              item.icon,
+              size: 20,
+              color: isSelected ? AppTheme.accent : AppTheme.inactiveIcon,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              item.label,
+              style: isSelected
+                  ? AppTheme.navLabelSelectedStyle
+                  : AppTheme.navLabelStyle,
+            ),
+          ],
+        ),
       ),
     );
   }

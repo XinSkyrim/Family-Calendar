@@ -6,6 +6,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter/services.dart';
 
 import '../services/session_manager.dart';
+import '../services/user_profile_service.dart';
 import 'register_screen.dart';
 import 'memo_screen.dart';
 
@@ -123,6 +124,13 @@ class _LoginScreenState extends State<LoginScreen> {
           'updatedAt': now,
         }, SetOptions(merge: true));
       }
+
+      await UserProfileService.update(
+        fullName: user.displayName?.trim().isNotEmpty == true
+            ? user.displayName!.trim()
+            : email.split('@').first,
+        photoUrl: user.photoURL ?? '',
+      );
 
       if (!mounted) return;
 
@@ -286,6 +294,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
         await userDocRef.set(updateData, SetOptions(merge: true));
       }
+
+      await UserProfileService.update(
+        fullName: fallbackName,
+        photoUrl: user.photoURL ?? '',
+      );
 
       if (!mounted) return;
 

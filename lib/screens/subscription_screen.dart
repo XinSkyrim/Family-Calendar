@@ -240,7 +240,7 @@ class SubscriptionScreen extends StatelessWidget {
           ),
           const TextSpan(text: '\n'),
           TextSpan(
-            text: 'Memo',
+            text: 'Notes',
             style: const TextStyle(color: AppTheme.accent),
           ),
         ],

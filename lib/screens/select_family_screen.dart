@@ -3,10 +3,11 @@ import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../navigation/app_bottom_nav.dart';
 import '../themes/app_theme.dart';
-import '../widgets/app_header.dart';
+import '../widgets/app_today_top_bar.dart';
 import '../widgets/bottom_navigation_bar.dart';
 import 'create_family_dialog.dart';
 import 'family_screen.dart';
@@ -53,7 +54,7 @@ class SelectFamilyScreen extends StatefulWidget {
 }
 
 class _SelectFamilyScreenState extends State<SelectFamilyScreen> {
-  int _selectedNavIndex = 1;
+  int _selectedNavIndex = 2;
   late Future<List<_FamilyGroup>> _groupsFuture;
 
   @override
@@ -241,11 +242,13 @@ class _SelectFamilyScreenState extends State<SelectFamilyScreen> {
                         ],
                       ),
                     ),
-                    const Positioned(
+                    Positioned(
                       top: 0,
                       left: 0,
                       right: 0,
-                      child: AppHeader(title: 'Select Group', useBlur: false),
+                      child: AppTodayTopBar(
+                        title: DateFormat('d MMMM').format(DateTime.now()),
+                      ),
                     ),
                     Positioned(
                       left: 24,

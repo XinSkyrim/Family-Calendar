@@ -36,10 +36,10 @@ void navigateFromBottomNav(
       destination = const MemoScreen();
       break;
     case 1:
-      destination = const SelectFamilyScreen();
+      destination = const CalendarScreen();
       break;
     case 2:
-      destination = const CalendarScreen();
+      destination = const SelectFamilyScreen();
       break;
     case 3:
       destination = const SettingsScreen();

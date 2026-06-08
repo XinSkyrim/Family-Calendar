@@ -7,20 +7,12 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:502418497658:android:0b4a3be915f1e9b9c59bc3",
+        "mobilesdk_app_id": "1:502418497658:android:074afb60815ae662c59bc3",
         "android_client_info": {
-          "package_name": "com.example.calendar"
+          "package_name": "com.kefan.calendar"
         }
       },
       "oauth_client": [
-        {
-          "client_id": "502418497658-tn6oeb5gtinf32e2utfm2cchtukh15a9.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.example.calendar",
-            "certificate_hash": "9dd23a872fcfa55fcce16ea93a0788d2257d7253"
-          }
-        },
         {
           "client_id": "502418497658-fjkdh7slqsunccdm6hhh0gr9cjvqvfoo.apps.googleusercontent.com",
           "client_type": 3

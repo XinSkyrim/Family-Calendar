@@ -64,7 +64,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '502418497658',
     projectId: 'family-calendar-65220',
     storageBucket: 'family-calendar-65220.firebasestorage.app',
-    iosBundleId: 'com.example.calendar',
+    iosBundleId: 'com.kefan.calendar',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
@@ -73,7 +73,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '502418497658',
     projectId: 'family-calendar-65220',
     storageBucket: 'family-calendar-65220.firebasestorage.app',
-    iosBundleId: 'com.example.calendar',
+    iosBundleId: 'com.kefan.calendar',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(

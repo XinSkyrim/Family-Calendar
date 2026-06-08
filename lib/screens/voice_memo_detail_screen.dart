@@ -25,7 +25,7 @@ class VoiceMemoDetailScreen extends StatelessWidget {
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: const Text(
-          'Memo details',
+          'Note details',
           style: TextStyle(
             color: primaryColor,
             fontWeight: FontWeight.w800,

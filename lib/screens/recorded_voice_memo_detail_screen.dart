@@ -234,10 +234,10 @@ class _RecordedVoiceMemoDetailScreenState
       _originalBody = body;
 
       if (showMessage) {
-        _showMessage('Voice memo saved.');
+        _showMessage('Voice note saved.');
       }
     } catch (_) {
-      _showMessage('Failed to save voice memo. Please try again.');
+      _showMessage('Failed to save voice note. Please try again.');
     } finally {
       if (mounted) {
         setState(() {
@@ -408,7 +408,7 @@ class _RecordedVoiceMemoDetailScreenState
 
   bool _isUnsetTitle(String title) {
     final normalized = title.trim();
-    return normalized.isEmpty || normalized == 'Voice Memo';
+    return normalized.isEmpty || normalized == 'Voice Note';
   }
 
   @override
@@ -607,7 +607,7 @@ class _RecordedVoiceMemoDetailScreenState
             ],
             textAlign: TextAlign.center,
             decoration: const InputDecoration(
-              hintText: 'Voice memo title',
+              hintText: 'Voice note title',
               border: InputBorder.none,
               isCollapsed: true,
               counterText: '',
@@ -743,7 +743,7 @@ class _RecordedVoiceMemoDetailScreenState
                 ),
                 SizedBox(width: 10),
                 Text(
-                  'Summarizing voice memo...',
+                  'Summarizing voice note...',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -762,7 +762,7 @@ class _RecordedVoiceMemoDetailScreenState
             maxLines: 9,
             onTapOutside: (_) => _dismissKeyboard(),
             decoration: const InputDecoration(
-              hintText: 'Write notes for this voice memo...',
+              hintText: 'Write notes for this voice note...',
               border: InputBorder.none,
               isCollapsed: true,
             ),
