@@ -2,7 +2,6 @@
 
 Family Calendar is a Flutter-based family productivity app for capturing everyday notes, coordinating household schedules, and turning voice or text memos into actionable calendar tasks. It combines a mobile-first Flutter client with Firebase Authentication, Cloud Firestore, Firebase Storage, Cloud Functions, and OpenAI-powered language features.
 
-The app currently ships under the Flutter package name `calendar` and the in-app title `Family Memo`.
 
 ## Core Features
 
