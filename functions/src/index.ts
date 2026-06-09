@@ -28,7 +28,8 @@ const RECORDING_TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe";
 const RECORDING_SUMMARY_MODEL = "gpt-4o-mini";
 const MAX_TRANSCRIPTION_FILE_BYTES = 24 * 1024 * 1024;
 const AUDIO_SEGMENT_SECONDS = 20 * 60;
-const NO_RECOGNIZED_INFO = "No information.";
+const NO_RECOGNIZED_INFO =
+  "I couldn't identify enough meaningful speech to summarize this voice note. Please try recording again a little closer to the microphone, or add notes manually.";
 const execFileAsync = promisify(execFile);
 
 interface DraftEvent {
@@ -53,6 +54,15 @@ interface ChatWithAIRequest {
 interface ChatWithAIResponse {
   reply: string;
   draftEvents?: DraftEvent[];
+}
+
+interface DebugOpenAIHealthCheckResponse {
+  ok: boolean;
+  secretAvailable: boolean;
+  secretSource: string;
+  secretLength: number;
+  model: string;
+  reply: string;
 }
 
 interface SummarizeVoiceMemoRequest {
@@ -126,6 +136,40 @@ const pruneAndCheckRateLimit = (key: string): void => {
   fresh.push(now);
 //   userCallTimestamps.set(uid, fresh);
   userCallTimestamps.set(key, fresh);
+};
+
+const functionErrorDetails = (error: unknown): Record<string, unknown> => {
+  if (error instanceof Error) {
+    const record = error as Error & Record<string, unknown>;
+    return {
+      name: error.name,
+      message: error.message,
+      code: record.code,
+      status: record.status,
+      type: record.type,
+      details: record.details,
+      stack: error.stack,
+    };
+  }
+
+  if (error && typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    return {
+      name: record.name,
+      message: record.message,
+      code: record.code,
+      status: record.status,
+      type: record.type,
+    };
+  }
+
+  return {
+    message: String(error),
+  };
+};
+
+const previewText = (value: string, maxLength = 1200): string => {
+  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
 };
 
 const parseAssistantJson = (content: string): ChatWithAIResponse => {
@@ -345,20 +389,31 @@ const limitTextItems = (items: string[]): string[] =>
 
 const parseMemoTaskJson = (content: string): MemoTaskDraftResponse => {
   let parsed: unknown;
+  let jsonContent = content;
   try {
     const trimmed = content.trim();
-    const jsonContent =
+    jsonContent =
       trimmed.startsWith("```") ?
         trimmed.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "") :
         trimmed;
     parsed = JSON.parse(jsonContent);
   } catch (error) {
-    logger.error("Memo task response is not valid JSON", error);
-    throw new HttpsError("internal", "AI response format error.");
+    logger.error("Memo task response is not valid JSON", {
+      error,
+      rawResponsePreview: previewText(jsonContent),
+    });
+    throw new HttpsError(
+      "unknown",
+      "AI response was not valid JSON.",
+      {
+        rawResponsePreview: previewText(jsonContent),
+        errorMessage: error instanceof Error ? error.message : String(error),
+      }
+    );
   }
 
   if (!parsed || typeof parsed !== "object") {
-    throw new HttpsError("internal", "AI response format invalid.");
+    throw new HttpsError("unknown", "AI response format invalid.");
   }
 
   const candidate = parsed as Record<string, unknown>;
@@ -366,7 +421,13 @@ const parseMemoTaskJson = (content: string): MemoTaskDraftResponse => {
   const notes = typeof candidate.notes === "string" ? candidate.notes.trim() : "";
 
   if (!title && !notes) {
-    throw new HttpsError("internal", "AI task response missing usable fields.");
+    throw new HttpsError(
+      "invalid-argument",
+      "No clear event details found in this memo.",
+      {
+        rawResponsePreview: previewText(jsonContent),
+      }
+    );
   }
 
   return {
@@ -581,6 +642,7 @@ const summarizeRecordedTranscript = async (
     "Do not invent details that are not present.",
     "The transcript may be long, fragmented, disfluent, or separated by pauses.",
     "If any recognizable content is present, summarize the useful partial information.",
+    "If the transcript is only repeated test text, random characters, filler, or noise, answer quickly with no recognized information.",
     `Return ${JSON.stringify(NO_RECOGNIZED_INFO)} only when the transcript contains no recognizable words or only meaningless filler.`,
   ].join(" ");
 
@@ -591,12 +653,14 @@ const summarizeRecordedTranscript = async (
     "Use a concise paragraph or short bullet-style lines.",
     "Keep the summary under 900 characters.",
     "Include clear action items or reminders when they are present.",
+    "Never copy or repeat long raw transcript text.",
     `Do not return ${NO_RECOGNIZED_INFO} solely because the memo is long, broken up, or lacks a perfect sentence structure.`,
   ].join("\n");
 
   const completion = await openai.chat.completions.create({
     model: RECORDING_SUMMARY_MODEL,
     temperature: 0.2,
+    max_tokens: 260,
     response_format: {type: "json_object"},
     messages: [
       {role: "system", content: systemPrompt},
@@ -769,7 +833,11 @@ export const chatWithAI = onCall(
     const apiKey = openAiKeySecret.value() || process.env.OPENAI_API_KEY;
     if (!apiKey) {
       logger.error("OPENAI_API_KEY is missing");
-      throw new HttpsError("internal", "Server is not configured for AI service.");
+      throw new HttpsError(
+        "failed-precondition",
+        "Server is not configured for AI service.",
+        {reason: "OPENAI_API_KEY is missing"}
+      );
     }
 
     const openai = new OpenAI({apiKey});
@@ -828,7 +896,7 @@ export const chatWithAI = onCall(
 
       const content = completion.choices[0]?.message?.content;
       if (!content) {
-        throw new HttpsError("internal", "No response from AI model.");
+        throw new HttpsError("unknown", "No response from AI model.");
       }
 
       return parseAssistantJson(content);
@@ -838,6 +906,93 @@ export const chatWithAI = onCall(
       }
       logger.error("chatWithAI failed", error);
       throw new HttpsError("internal", "Failed to process AI request.");
+    }
+  }
+);
+
+export const debugOpenAIHealthCheck = onCall(
+  {
+    secrets: [openAiKeySecret],
+    region: "australia-southeast1",
+    timeoutSeconds: 45,
+  },
+  async (request): Promise<DebugOpenAIHealthCheckResponse> => {
+    const secretValue = openAiKeySecret.value();
+    const envValue = process.env.OPENAI_API_KEY;
+    const apiKey = secretValue || envValue;
+    const secretSource = secretValue ? "firebase-secret" : envValue ? "env" : "missing";
+
+    logger.info("debugOpenAIHealthCheck started", {
+      uid: request.auth?.uid ?? "anonymous",
+      secretAvailable: Boolean(apiKey),
+      secretSource,
+      secretLength: apiKey?.length ?? 0,
+      model: DEFAULT_MODEL,
+    });
+
+    if (!apiKey) {
+      throw new HttpsError(
+        "failed-precondition",
+        "OPENAI_API_KEY is not available in the cloud function runtime.",
+        {
+          secretAvailable: false,
+          secretSource,
+        }
+      );
+    }
+
+    try {
+      const openai = new OpenAI({
+        apiKey,
+        timeout: 30000,
+      });
+
+      const completion = await openai.chat.completions.create({
+        model: DEFAULT_MODEL,
+        temperature: 0,
+        max_tokens: 40,
+        response_format: {type: "json_object"},
+        messages: [
+          {
+            role: "system",
+            content: "Return JSON only.",
+          },
+          {
+            role: "user",
+            content: "Return {\"ok\":true,\"source\":\"firebase-function\"}.",
+          },
+        ],
+      });
+
+      const reply = completion.choices[0]?.message?.content ?? "";
+      if (!reply) {
+        throw new HttpsError("unknown", "OpenAI returned no content.");
+      }
+
+      logger.info("debugOpenAIHealthCheck finished", {
+        uid: request.auth?.uid ?? "anonymous",
+        replyLength: reply.length,
+      });
+
+      return {
+        ok: true,
+        secretAvailable: true,
+        secretSource,
+        secretLength: apiKey.length,
+        model: DEFAULT_MODEL,
+        reply,
+      };
+    } catch (error) {
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+
+      logger.error("debugOpenAIHealthCheck failed", error);
+      throw new HttpsError(
+        "unknown",
+        "OpenAI health check failed.",
+        functionErrorDetails(error)
+      );
     }
   }
 );
@@ -957,7 +1112,7 @@ export const summarizeVoiceMemo = onCall(
       throw new HttpsError("internal", "Server is not configured for AI service.");
     }
 
-    const openai = new OpenAI({apiKey});
+    const openai = new OpenAI({apiKey, timeout: 30000});
 
     const systemPrompt = [
       "You are the Family Calendar voice memo assistant.",
@@ -965,6 +1120,7 @@ export const summarizeVoiceMemo = onCall(
       "Preserve user intent, avoid fabrication, and be concise but helpful.",
       "Infer a short memo category such as Family, Work, Health, Study, Errand, or Personal.",
       "If action items are implied, list them briefly. If none exist, return an empty array.",
+      "If the input is only repeated test text, random characters, filler, or noise, answer quickly with no recognized information.",
       `Assume timezone ${timezone} for interpretation context only.`,
       `The current local date is ${currentDateISO}.`,
     ].join(" ");
@@ -983,7 +1139,10 @@ export const summarizeVoiceMemo = onCall(
       "Keep the output in English.",
       "Do not mention the schema.",
       `Keep summary, detailedSummary, and each list item within ${MAX_SUMMARY_CHARS} characters.`,
+      "Never copy or repeat long raw input text.",
       "Do not invent dates, people, or commitments not present in the input.",
+      "For meaningless input, return exactly:",
+      `{ "title": "Untitled memo", "summary": ${JSON.stringify(NO_RECOGNIZED_INFO)}, "detailedSummary": ${JSON.stringify(NO_RECOGNIZED_INFO)}, "keyPoints": [], "actionItems": [], "category": "Personal" }`,
     ].join("\n");
 
     const userPrompt = `inputMode: ${inputMode}\nrawInput: ${input}`;
@@ -992,6 +1151,7 @@ export const summarizeVoiceMemo = onCall(
       const completion = await openai.chat.completions.create({
         model: DEFAULT_MODEL,
         temperature: 0.2,
+        max_tokens: 300,
         response_format: {type: "json_object"},
         messages: [
           {role: "system", content: systemPrompt},
@@ -1069,13 +1229,33 @@ export const summarizeRecordedVoiceMemoOnCreate = onDocumentCreated(
 );
 
 export const analyzeMemoToTask = onCall(
-  {secrets: [openAiKeySecret], region: "australia-southeast1"},
+  {
+    secrets: [openAiKeySecret],
+    region: "australia-southeast1",
+    timeoutSeconds: 60,
+  },
   async (request): Promise<MemoTaskDraftResponse> => {
+    const startedAt = Date.now();
+    const checkpoint = (
+      step: string,
+      extra: Record<string, unknown> = {}
+    ): void => {
+      logger.info("analyzeMemoToTask checkpoint", {
+        step,
+        elapsedMs: Date.now() - startedAt,
+        uid: request.auth?.uid ?? "anonymous",
+        ...extra,
+      });
+    };
+
+    checkpoint("start");
+
     if (!request.auth?.uid) {
       throw new HttpsError("unauthenticated", "You must be logged in to analyze a memo.");
     }
 
     pruneAndCheckRateLimit(request.auth.uid);
+    checkpoint("auth-and-rate-limit-ok");
 
     const data = (request.data ?? {}) as AnalyzeMemoTaskRequest;
     const title = typeof data.title === "string" ? data.title.trim() : "";
@@ -1089,6 +1269,14 @@ export const analyzeMemoToTask = onCall(
     if (!title && !body) {
       throw new HttpsError("invalid-argument", "Memo content is required.");
     }
+    checkpoint("request-parsed", {
+      titleLength: title.length,
+      bodyLength: body.length,
+      timezone,
+      currentDateISO,
+      titlePreview: previewText(title, 120),
+      bodyPreview: previewText(body, 240),
+    });
 
     const apiKey = openAiKeySecret.value() || process.env.OPENAI_API_KEY;
     if (!apiKey) {
@@ -1097,12 +1285,17 @@ export const analyzeMemoToTask = onCall(
     }
 
     const openai = new OpenAI({apiKey});
+    checkpoint("openai-client-created", {
+      model: DEFAULT_MODEL,
+    });
 
     const systemPrompt = [
       "You are the Family Calendar memo-to-task assistant.",
       "Read one memo and extract only clear event details that can prefill an add-task form.",
       "Never fabricate dates, times, titles, or reminders.",
       "If a field is unclear, leave it empty instead of guessing.",
+      "If the memo is meaningless, repetitive, random text, or has no clear event/task intent, return empty strings.",
+      "Do not copy or repeat long memo text into the output.",
       "Allowed category values are Education, Family, Leisure.",
       `Interpret date and time references in timezone ${timezone}.`,
       `The current local date is ${currentDateISO}.`,
@@ -1120,9 +1313,12 @@ export const analyzeMemoToTask = onCall(
       "  \"reminderEnabled\": true,",
       "  \"confidence\": \"number 0..1\"",
       "}",
+      "If no clear event/task details exist, return exactly:",
+      "{ \"title\": \"\", \"notes\": \"\", \"category\": \"\", \"dateISO\": \"\", \"time24h\": \"\", \"reminderEnabled\": false, \"confidence\": 0 }",
       "Use memo wording where possible.",
       "If memo title is usable as task title, prefer it.",
-      "Put the memo body into notes when it helps the user review context.",
+      "Keep notes useful for the task detail field, max 180 characters.",
+      "Never echo repetitive filler text.",
       `When the memo says today/今天/今日, use ${currentDateISO}.`,
       `When the memo says tomorrow/明天, use ${addDaysToDateISO(currentDateISO, 1)}.`,
       `When the memo says 后天/day after tomorrow, use ${addDaysToDateISO(currentDateISO, 2)}.`,
@@ -1132,9 +1328,13 @@ export const analyzeMemoToTask = onCall(
     const userPrompt = `memoTitle: ${title || "n/a"}\nmemoBody: ${body || "n/a"}`;
 
     try {
+      checkpoint("openai-request-start", {
+        userPromptLength: userPrompt.length,
+      });
       const completion = await openai.chat.completions.create({
         model: DEFAULT_MODEL,
         temperature: 0.1,
+        max_tokens: 300,
         response_format: {type: "json_object"},
         messages: [
           {role: "system", content: systemPrompt},
@@ -1142,24 +1342,48 @@ export const analyzeMemoToTask = onCall(
           {role: "user", content: userPrompt},
         ],
       });
+      checkpoint("openai-request-finished");
 
       const content = completion.choices[0]?.message?.content;
       if (!content) {
         throw new HttpsError("internal", "No response from AI model.");
       }
+      logger.info("analyzeMemoToTask raw model response", {
+        elapsedMs: Date.now() - startedAt,
+        contentLength: content.length,
+        contentPreview: previewText(content),
+      });
 
       const draft = parseMemoTaskJson(content);
       const sourceText = `${title}\n${body}`;
+      checkpoint("ai-response-parsed", {
+        draftTitle: draft.title,
+        hasDate: Boolean(draft.dateISO),
+        hasTime: Boolean(draft.time24h),
+      });
       return {
         ...draft,
         dateISO: normalizeMemoTaskDateISO(draft.dateISO, sourceText, currentDateISO),
       };
     } catch (error) {
       if (error instanceof HttpsError) {
-        throw error;
+        logger.error("analyzeMemoToTask failed with HttpsError", {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+        });
+        throw new HttpsError(
+          error.code === "internal" ? "unknown" : error.code,
+          error.message,
+          error.details ?? functionErrorDetails(error)
+        );
       }
       logger.error("analyzeMemoToTask failed", error);
-      throw new HttpsError("internal", "Failed to analyze memo.");
+      throw new HttpsError(
+        "unknown",
+        "Failed to analyze memo.",
+        functionErrorDetails(error)
+      );
     }
   }
 );

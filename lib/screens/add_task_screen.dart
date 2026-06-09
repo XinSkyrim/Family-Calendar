@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../services/task_invitation_service.dart';
 import '../assets/figma_assets.dart';
 import '../themes/app_theme.dart';
+import '../widgets/avatar_image.dart';
 import 'family_selection_screen.dart';
 import 'select_members_screen.dart';
 
@@ -287,8 +288,8 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
     });
   }
 
-  List<String> _buildParticipantIds(String currentUid) {
-    final ids = <String>{currentUid};
+  List<String> _buildParticipantIds(String _) {
+    final ids = <String>{};
 
     for (final member in _selectedParticipants) {
       if (member.id.trim().isNotEmpty) {
@@ -330,10 +331,12 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
     try {
       final familyId =
           _selectedFamilyId ?? await _loadCurrentFamilyId(user.uid) ?? user.uid;
-      final participantIds = _buildParticipantIds(user.uid);
-      final containsSelf = participantIds.contains(user.uid);
-      final invitedUserIds =
-      participantIds.where((id) => id != user.uid).toList();
+      final selectedMemberIds = _buildParticipantIds(user.uid);
+      final participantIds = selectedMemberIds;
+      final containsSelf = selectedMemberIds.contains(user.uid);
+      final invitedUserIds = selectedMemberIds
+          .where((id) => id != user.uid)
+          .toList();
       final startTime = _buildStartDateTime();
       final endTime = startTime.add(const Duration(hours: 1));
       final now = Timestamp.now();
@@ -361,30 +364,34 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
         pendingIds = participantIds;
       }
 
+      finalParticipantIds = [user.uid];
+      acceptedIds = [];
+      pendingIds = invitedUserIds;
 
-      final eventRef =
-      await FirebaseFirestore.instance.collection('events').add({
-        'title': title,
-        'description': _notesController.text.trim(),
-        'eventType': _selectedEventType(),
-        'familyId': familyId,
-        'isAllDay': false,
-        'location': '',
+      final eventRef = await FirebaseFirestore.instance
+          .collection('events')
+          .add({
+            'title': title,
+            'description': _notesController.text.trim(),
+            'eventType': _selectedEventType(),
+            'familyId': familyId,
+            'isAllDay': false,
+            'location': '',
 
-        'participantIds': finalParticipantIds,
-        'pendingParticipantIds': pendingIds,
-        'acceptedParticipantIds': acceptedIds,
-        'declinedParticipantIds': <String>[],
+            'participantIds': finalParticipantIds,
+            'pendingParticipantIds': pendingIds,
+            'acceptedParticipantIds': acceptedIds,
+            'declinedParticipantIds': <String>[],
 
-        'reminderMinutes': 0,
-        'repeatType': 'none',
-        'startTime': Timestamp.fromDate(startTime),
-        'endTime': Timestamp.fromDate(endTime),
-        'status': 'active',
-        'createdBy': user.uid,
-        'createdAt': now,
-        'updatedAt': now,
-      });
+            'reminderMinutes': 0,
+            'repeatType': 'none',
+            'startTime': Timestamp.fromDate(startTime),
+            'endTime': Timestamp.fromDate(endTime),
+            'status': 'active',
+            'createdBy': user.uid,
+            'createdAt': now,
+            'updatedAt': now,
+          });
 
       /// 只有存在“邀请别人”的情况才发送通知
       if (invitedUserIds.isNotEmpty) {
@@ -429,35 +436,14 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   }
 
   Widget _buildParticipantAvatar(SelectedTaskMember member) {
-    final hasImage = member.avatarUrl.trim().isNotEmpty;
-
     return Padding(
       padding: const EdgeInsets.only(right: 8.0),
       child: CircleAvatar(
         radius: 22,
         backgroundColor: const Color(0xFFDCE1E8),
-        backgroundImage: hasImage ? NetworkImage(member.avatarUrl) : null,
-        child: hasImage
-            ? null
-            : Text(
-                _memberInitials(member.name),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
+        backgroundImage: avatarImageProvider(member.avatarUrl),
       ),
     );
-  }
-
-  String _memberInitials(String name) {
-    final parts = name
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((part) => part.isNotEmpty)
-        .toList();
-    if (parts.isEmpty) return '?';
-    return parts.take(2).map((e) => e[0]).join().toUpperCase();
   }
 
   @override
@@ -754,15 +740,20 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
             ),
           )
         else
-          Wrap(
-            children: _selectedParticipants
-                .map(_buildParticipantAvatar)
-                .toList(),
+          SizedBox(
+            height: 44,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Wrap(
+                children: _selectedParticipants
+                    .map(_buildParticipantAvatar)
+                    .toList(),
+              ),
+            ),
           ),
       ],
     );
   }
-
 
   Widget _buildSaveButton(BuildContext context) {
     return SizedBox(

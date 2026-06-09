@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'avatar_image.dart';
 
 class EventCard extends StatelessWidget {
   final Color color;
@@ -75,12 +76,15 @@ class EventCard extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              ..._buildParticipantAvatars(),
-              if (subtitle != null) const SizedBox(width: 8),
+              if (participants.isNotEmpty) ..._buildParticipantAvatars(),
+              if (participants.isNotEmpty && subtitle != null)
+                const SizedBox(width: 8),
               if (subtitle != null)
                 Flexible(
                   child: Text(
                     subtitle!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: _fadedColorFor(color),
                       fontSize: 13,
@@ -131,29 +135,7 @@ class EventCard extends StatelessWidget {
                 ),
               ],
             ),
-            child: ClipOval(
-              child: imageUrl.isNotEmpty
-                  ? Image.network(
-                imageUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
-                  color: const Color(0xFFF1F5F9),
-                  child: const Icon(
-                    Icons.person,
-                    size: 18,
-                    color: Colors.grey,
-                  ),
-                ),
-              )
-                  : Container(
-                color: const Color(0xFFF1F5F9),
-                child: const Icon(
-                  Icons.person,
-                  size: 18,
-                  color: Colors.grey,
-                ),
-              ),
-            ),
+            child: ClipOval(child: AvatarImage(imageUrl: imageUrl)),
           ),
         ),
       );
@@ -177,7 +159,6 @@ class EventCard extends StatelessWidget {
 
     return widgets;
   }
-
 
   Color _fadedColorFor(Color c) {
     return c.computeLuminance() > 0.5 ? Colors.black54 : Colors.white70;

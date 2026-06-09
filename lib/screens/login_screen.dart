@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter/services.dart';
 
+import '../constants/default_avatar.dart';
 import '../services/session_manager.dart';
 import '../services/user_profile_service.dart';
 import 'register_screen.dart';
@@ -105,7 +106,7 @@ class _LoginScreenState extends State<LoginScreen> {
           'email': user.email ?? email,
           'username': fallbackName.replaceAll(' ', ''),
           'fullName': fallbackName,
-          'photoURL': user.photoURL ?? '',
+          'photoURL': user.photoURL ?? DefaultAvatar.path,
           'bio': '',
           'role': 'owner',
           'status': 'active',
@@ -129,7 +130,7 @@ class _LoginScreenState extends State<LoginScreen> {
         fullName: user.displayName?.trim().isNotEmpty == true
             ? user.displayName!.trim()
             : email.split('@').first,
-        photoUrl: user.photoURL ?? '',
+        photoUrl: user.photoURL ?? DefaultAvatar.path,
       );
 
       if (!mounted) return;
@@ -140,9 +141,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-          builder: (_) => const MemoScreen(),
-        ),
+        MaterialPageRoute(builder: (_) => const MemoScreen()),
       );
     } on FirebaseAuthException catch (e) {
       _showMessage(_getFirebaseAuthErrorMessage(e));
@@ -184,7 +183,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     final GoogleSignInAuthentication googleAuth =
-    await googleUser.authentication;
+        await googleUser.authentication;
 
     if (googleAuth.idToken == null) {
       throw FirebaseAuthException(
@@ -202,7 +201,6 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleGoogleSignIn() async {
-
     FocusManager.instance.primaryFocus?.unfocus();
     await SystemChannels.textInput.invokeMethod('TextInput.hide');
     await Future.delayed(const Duration(milliseconds: 150));
@@ -244,7 +242,7 @@ class _LoginScreenState extends State<LoginScreen> {
           'email': user.email ?? '',
           'username': fallbackName.replaceAll(' ', ''),
           'fullName': fallbackName,
-          'photoURL': user.photoURL ?? '',
+          'photoURL': user.photoURL ?? DefaultAvatar.path,
           'bio': '',
           'role': 'owner',
           'status': 'active',
@@ -289,7 +287,7 @@ class _LoginScreenState extends State<LoginScreen> {
         }
 
         if (currentPhotoURL.isEmpty) {
-          updateData['photoURL'] = user.photoURL ?? '';
+          updateData['photoURL'] = user.photoURL ?? DefaultAvatar.path;
         }
 
         await userDocRef.set(updateData, SetOptions(merge: true));
@@ -297,7 +295,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       await UserProfileService.update(
         fullName: fallbackName,
-        photoUrl: user.photoURL ?? '',
+        photoUrl: user.photoURL ?? DefaultAvatar.path,
       );
 
       if (!mounted) return;
@@ -308,9 +306,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-          builder: (_) => const MemoScreen(),
-        ),
+        MaterialPageRoute(builder: (_) => const MemoScreen()),
       );
     } on FirebaseAuthException catch (e) {
       _showMessage(_getFirebaseAuthErrorMessage(e));
@@ -340,10 +336,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           title: const Text(
             'Reset Password',
-            style: TextStyle(
-              color: primaryColor,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
           ),
           content: TextField(
             controller: resetEmailController,
@@ -358,10 +351,7 @@ class _LoginScreenState extends State<LoginScreen> {
               onPressed: () {
                 Navigator.pop(dialogContext);
               },
-              child: const Text(
-                'Cancel',
-                style: TextStyle(color: hintColor),
-              ),
+              child: const Text('Cancel', style: TextStyle(color: hintColor)),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
@@ -436,9 +426,9 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -661,26 +651,24 @@ class _LoginScreenState extends State<LoginScreen> {
             padding: const EdgeInsets.symmetric(vertical: 16),
             child: _isLoading
                 ? const Center(
-              child: SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    Colors.white,
-                  ),
-                ),
-              ),
-            )
+                    child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    ),
+                  )
                 : const Text(
-              'Sign In',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0F172A),
-              ),
-            ),
+                    'Sign In',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
           ),
         ),
       ),
@@ -703,40 +691,38 @@ class _LoginScreenState extends State<LoginScreen> {
             padding: const EdgeInsets.symmetric(vertical: 15),
             child: _isGoogleLoading
                 ? const Center(
-              child: SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    accentColor,
-                  ),
-                ),
-              ),
-            )
+                    child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        valueColor: AlwaysStoppedAnimation<Color>(accentColor),
+                      ),
+                    ),
+                  )
                 : const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  'G',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: primaryColor,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'G',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: primaryColor,
+                        ),
+                      ),
+                      SizedBox(width: 12),
+                      Text(
+                        'Continue with Google',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: primaryColor,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                SizedBox(width: 12),
-                Text(
-                  'Continue with Google',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: primaryColor,
-                  ),
-                ),
-              ],
-            ),
           ),
         ),
       ),
@@ -760,11 +746,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        const Divider(
-          color: Color(0xFFF1F5F9),
-          height: 1,
-          thickness: 1,
-        ),
+        const Divider(color: Color(0xFFF1F5F9), height: 1, thickness: 1),
         const SizedBox(height: 25),
         Center(
           child: RichText(

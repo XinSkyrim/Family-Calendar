@@ -26,8 +26,7 @@ class MemoScreen extends StatefulWidget {
   State<MemoScreen> createState() => _MemoScreenState();
 }
 
-class _MemoScreenState extends State<MemoScreen>
-    with SingleTickerProviderStateMixin {
+class _MemoScreenState extends State<MemoScreen> with TickerProviderStateMixin {
   static const bgColor = AppTheme.pageBackground;
   static const primaryColor = Color(0xFF0F172A);
   static const accentColor = Color(0xFFE2B736);
@@ -38,25 +37,30 @@ class _MemoScreenState extends State<MemoScreen>
       'No notes yet. Tap to add notes for this voice note.';
 
   final int _selectedNavIndex = 0;
-  String? _deleteActionMemoId;
   String? _deletingMemoId;
+  bool _isBatchManaging = false;
+  bool _isBatchDeleting = false;
+  final Set<String> _selectedMemoIds = <String>{};
+  Set<String> _batchDeletingMemoIds = <String>{};
+  List<_MemoItem> _lastMemoItems = const <_MemoItem>[];
   final AudioRecorder _audioRecorder = AudioRecorder();
   late final AnimationController _voiceBarsController;
+  AnimationController? _recordButtonHintController;
   late final ValueNotifier<_VoiceUiState> _voiceUi;
   StreamSubscription<Amplitude>? _recordingAmplitudeSub;
   Timer? _recordingTimer;
   DateTime? _recordingStartedAt;
+  Duration _recordingAccumulatedElapsed = Duration.zero;
   String? _activeRecordingPath;
+  bool _showRecordButtonHint = false;
 
   bool get _isListening => _voiceUi.value.isListening;
   bool get _isVoiceTransitioning => _voiceUi.value.isVoiceTransitioning;
   bool get _isRecordingSessionActive => _voiceUi.value.isRecordingSessionActive;
   bool get _isCreatingVoiceMemo => _voiceUi.value.isCreatingVoiceMemo;
+  bool get _isRecordingPaused => _voiceUi.value.isRecordingPaused;
   double get _soundLevel => _voiceUi.value.soundLevel;
   Duration get _recordingElapsed => _voiceUi.value.elapsed;
-  bool get _isVoiceOverlayVisible {
-    return _voiceUi.value.isOverlayVisible;
-  }
 
   @override
   void initState() {
@@ -66,6 +70,12 @@ class _MemoScreenState extends State<MemoScreen>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
+    _recordButtonHintController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 520),
+    );
+    _showRecordButtonHint = true;
+    _recordButtonHintController?.forward(from: 0);
   }
 
   @override
@@ -75,8 +85,23 @@ class _MemoScreenState extends State<MemoScreen>
     unawaited(WakelockPlus.disable());
     _voiceUi.dispose();
     _voiceBarsController.dispose();
+    _recordButtonHintController?.dispose();
     _audioRecorder.dispose();
     super.dispose();
+  }
+
+  Future<void> _hideRecordButtonHint() async {
+    if (!_showRecordButtonHint ||
+        _recordButtonHintController?.status == AnimationStatus.dismissed) {
+      return;
+    }
+
+    _showRecordButtonHint = false;
+    await _recordButtonHintController?.reverse();
+  }
+
+  Future<void> _markRecordButtonHintSeen() async {
+    await _hideRecordButtonHint();
   }
 
   void _updateVoiceUi(_VoiceUiState Function(_VoiceUiState current) transform) {
@@ -99,7 +124,6 @@ class _MemoScreenState extends State<MemoScreen>
       );
   }
 
-
   void _startVoiceBars() {
     if (!_voiceBarsController.isAnimating) {
       _voiceBarsController.repeat();
@@ -117,12 +141,14 @@ class _MemoScreenState extends State<MemoScreen>
         isVoiceTransitioning: false,
         isRecordingSessionActive: false,
         isCreatingVoiceMemo: false,
+        isRecordingPaused: false,
         soundLevel: 0,
         elapsed: Duration.zero,
       ),
     );
     _activeRecordingPath = null;
     _recordingStartedAt = null;
+    _recordingAccumulatedElapsed = Duration.zero;
     _recordingTimer?.cancel();
     _recordingTimer = null;
     _recordingAmplitudeSub?.cancel();
@@ -138,6 +164,7 @@ class _MemoScreenState extends State<MemoScreen>
       return;
     }
 
+    unawaited(_markRecordButtonHintSeen());
     final hasPermission = await _audioRecorder.hasPermission();
     if (!hasPermission) {
       _showMessage(
@@ -155,6 +182,7 @@ class _MemoScreenState extends State<MemoScreen>
         isVoiceTransitioning: true,
         isRecordingSessionActive: true,
         isCreatingVoiceMemo: false,
+        isRecordingPaused: false,
         soundLevel: 0,
         elapsed: Duration.zero,
       ),
@@ -184,6 +212,7 @@ class _MemoScreenState extends State<MemoScreen>
 
       _activeRecordingPath = path;
       _recordingStartedAt = DateTime.now();
+      _recordingAccumulatedElapsed = Duration.zero;
       _recordingAmplitudeSub?.cancel();
       _recordingAmplitudeSub = _audioRecorder
           .onAmplitudeChanged(const Duration(milliseconds: 120))
@@ -197,13 +226,11 @@ class _MemoScreenState extends State<MemoScreen>
           });
       _recordingTimer?.cancel();
       _recordingTimer = Timer.periodic(const Duration(milliseconds: 250), (_) {
-        final startedAt = _recordingStartedAt;
-        if (!mounted || startedAt == null) {
+        if (!mounted) {
           return;
         }
         _updateVoiceUi(
-          (current) =>
-              current.copyWith(elapsed: DateTime.now().difference(startedAt)),
+          (current) => current.copyWith(elapsed: _currentRecordingElapsed()),
         );
       });
 
@@ -217,24 +244,109 @@ class _MemoScreenState extends State<MemoScreen>
     }
   }
 
+  Future<void> _openNewTextMemo() async {
+    if (_isVoiceTransitioning ||
+        _isCreatingVoiceMemo ||
+        _isRecordingSessionActive) {
+      return;
+    }
+
+    unawaited(_markRecordButtonHintSeen());
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const MemoDetailScreen(isCreating: true),
+      ),
+    );
+  }
+
+  Duration _currentRecordingElapsed() {
+    final startedAt = _recordingStartedAt;
+    if (!_isListening || startedAt == null) {
+      return _recordingAccumulatedElapsed;
+    }
+
+    return _recordingAccumulatedElapsed + DateTime.now().difference(startedAt);
+  }
+
+  Future<void> _toggleRecordingPause() async {
+    if (!_isRecordingSessionActive ||
+        _isVoiceTransitioning ||
+        _isCreatingVoiceMemo) {
+      return;
+    }
+
+    try {
+      if (_isRecordingPaused) {
+        await _audioRecorder.resume();
+        if (!mounted) {
+          return;
+        }
+        _recordingStartedAt = DateTime.now();
+        _startVoiceBars();
+        _updateVoiceUi(
+          (current) => current.copyWith(
+            isListening: true,
+            isRecordingPaused: false,
+            soundLevel: 0,
+            elapsed: _recordingAccumulatedElapsed,
+          ),
+        );
+        return;
+      }
+
+      _recordingAccumulatedElapsed = _currentRecordingElapsed();
+      await _audioRecorder.pause();
+      if (!mounted) {
+        return;
+      }
+      _recordingStartedAt = null;
+      _stopVoiceBars();
+      _updateVoiceUi(
+        (current) => current.copyWith(
+          isListening: false,
+          isRecordingPaused: true,
+          soundLevel: 0,
+          elapsed: _recordingAccumulatedElapsed,
+        ),
+      );
+    } catch (_) {
+      _showMessage('Unable to pause recording. Please try again.');
+    }
+  }
+
+  Future<void> _confirmAndDiscardRecording() async {
+    if (!_isRecordingSessionActive ||
+        _isVoiceTransitioning ||
+        _isCreatingVoiceMemo) {
+      return;
+    }
+
+    final shouldDiscard = await _showDiscardRecordingDialog();
+    if (!mounted || !shouldDiscard) {
+      return;
+    }
+
+    await _stopVoiceMemoCreation(save: false);
+  }
+
   Future<void> _stopVoiceMemoCreation({required bool save}) async {
     if (!_isRecordingSessionActive || _isCreatingVoiceMemo) {
       return;
     }
 
+    final duration = _currentRecordingElapsed();
     _updateVoiceUi(
       (current) => current.copyWith(
         isListening: false,
         isVoiceTransitioning: true,
         isRecordingSessionActive: false,
+        isRecordingPaused: false,
         soundLevel: 0,
+        elapsed: duration,
       ),
     );
     _stopVoiceBars();
 
-    final duration = _recordingStartedAt == null
-        ? _recordingElapsed
-        : DateTime.now().difference(_recordingStartedAt!);
     String? audioPath;
 
     try {
@@ -273,20 +385,6 @@ class _MemoScreenState extends State<MemoScreen>
       audioFile.path,
       duration: duration,
       audioFileBytes: audioFile.lengthSync(),
-    );
-  }
-
-  Future<void> _openNewMemo() async {
-    if (_isVoiceTransitioning ||
-        _isCreatingVoiceMemo ||
-        _isRecordingSessionActive) {
-      return;
-    }
-
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => const MemoDetailScreen(isCreating: true),
-      ),
     );
   }
 
@@ -349,7 +447,7 @@ class _MemoScreenState extends State<MemoScreen>
         'localAudioPath': audioPath,
         'localAudioFileBytes': audioFileBytes,
         'audioDurationMillis': duration.inMilliseconds,
-        'aiSummaryStatus': uploadFailed ? 'failed' : 'pending',
+        'aiSummaryStatus': uploadFailed ? 'failed' : 'ready',
         'createdAtLocalMillis': createdAt.millisecondsSinceEpoch,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
@@ -393,7 +491,7 @@ class _MemoScreenState extends State<MemoScreen>
   }
 
   static String _voiceMemoAutoTitle(DateTime createdAt) {
-    return '${DateFormat('d MMMM yyyy').format(createdAt.toLocal())} voice note';
+    return DateFormat('yyyy-MM-dd HH:mm').format(createdAt.toLocal());
   }
 
   static bool _isUnsetVoiceTitle(String title) {
@@ -486,7 +584,7 @@ class _MemoScreenState extends State<MemoScreen>
   }
 
   Future<void> _confirmAndDeleteMemo(_MemoItem item) async {
-    if (_deletingMemoId != null) {
+    if (_deletingMemoId != null || _isBatchDeleting) {
       return;
     }
 
@@ -496,9 +594,6 @@ class _MemoScreenState extends State<MemoScreen>
     }
 
     if (!confirmed) {
-      setState(() {
-        _deleteActionMemoId = null;
-      });
       return;
     }
 
@@ -507,26 +602,11 @@ class _MemoScreenState extends State<MemoScreen>
     });
 
     try {
-      if (item.audioStoragePath.isNotEmpty) {
-        try {
-          await FirebaseStorage.instance.ref(item.audioStoragePath).delete();
-        } catch (_) {
-          // The memo itself should still be removable if storage cleanup fails.
-        }
-      }
-
-      await FirebaseFirestore.instance
-          .collection('memos')
-          .doc(item.id)
-          .delete();
+      await _deleteMemoItem(item);
 
       if (!mounted) {
         return;
       }
-
-      setState(() {
-        _deleteActionMemoId = null;
-      });
 
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
@@ -556,6 +636,95 @@ class _MemoScreenState extends State<MemoScreen>
         });
       }
     }
+  }
+
+  Future<void> _confirmAndDeleteSelectedMemos() async {
+    if (_selectedMemoIds.isEmpty ||
+        _isBatchDeleting ||
+        _deletingMemoId != null) {
+      return;
+    }
+
+    final selectedItems = _lastMemoItems
+        .where((item) => _selectedMemoIds.contains(item.id))
+        .toList(growable: false);
+    if (selectedItems.isEmpty) {
+      setState(() {
+        _selectedMemoIds.clear();
+      });
+      return;
+    }
+
+    final confirmed = await _showBatchDeleteMemoDialog(selectedItems.length);
+    if (!mounted || !confirmed) {
+      return;
+    }
+
+    setState(() {
+      _isBatchDeleting = true;
+      _batchDeletingMemoIds = selectedItems.map((item) => item.id).toSet();
+    });
+
+    try {
+      for (final item in selectedItems) {
+        await _deleteMemoItem(item);
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isBatchManaging = false;
+        _selectedMemoIds.clear();
+        _batchDeletingMemoIds = <String>{};
+      });
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              selectedItems.length == 1
+                  ? 'Note deleted.'
+                  : '${selectedItems.length} notes deleted.',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Failed to delete selected notes. Please try again.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBatchDeleting = false;
+          _batchDeletingMemoIds = <String>{};
+        });
+      }
+    }
+  }
+
+  Future<void> _deleteMemoItem(_MemoItem item) async {
+    if (item.audioStoragePath.isNotEmpty) {
+      try {
+        await FirebaseStorage.instance.ref(item.audioStoragePath).delete();
+      } catch (_) {
+        // The memo itself should still be removable if storage cleanup fails.
+      }
+    }
+
+    await FirebaseFirestore.instance.collection('memos').doc(item.id).delete();
   }
 
   Future<bool> _showDeleteMemoDialog(_MemoItem item) async {
@@ -704,18 +873,330 @@ class _MemoScreenState extends State<MemoScreen>
     return result ?? false;
   }
 
-  Future<void> _openMemoDetail(_MemoItem item) async {
-    if (_deleteActionMemoId == item.id) {
-      setState(() {
-        _deleteActionMemoId = null;
-      });
+  Future<bool> _showBatchDeleteMemoDialog(int count) async {
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 22,
+            vertical: 24,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          elevation: 10,
+          backgroundColor: Colors.white,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: borderColor),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFAC638).withValues(alpha: 0.08),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 45,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: AppTheme.lightBackground,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Center(
+                  child: Container(
+                    width: 58,
+                    height: 58,
+                    decoration: BoxDecoration(
+                      color: AppTheme.error.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    child: const Icon(
+                      Icons.delete_sweep_outlined,
+                      color: AppTheme.error,
+                      size: 31,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Delete selected notes?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                    color: primaryColor,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'This will permanently remove $count selected ${count == 1 ? 'note' : 'notes'}.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.mutedText,
+                    height: 1.6,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                GestureDetector(
+                  onTap: () => Navigator.of(dialogContext).pop(true),
+                  child: Container(
+                    width: double.infinity,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        colors: [AppTheme.accent, AppTheme.accentDark],
+                      ),
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.accent.withValues(alpha: 0.2),
+                          blurRadius: 15,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'Delete',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: AppTheme.lightBackground),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      backgroundColor: AppTheme.lightBackground,
+                      foregroundColor: primaryColor,
+                    ),
+                    onPressed: () => Navigator.of(dialogContext).pop(false),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    return result ?? false;
+  }
+
+  Future<bool> _showDiscardRecordingDialog() async {
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 22,
+            vertical: 24,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          elevation: 10,
+          backgroundColor: Colors.white,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: borderColor),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFAC638).withValues(alpha: 0.08),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 45,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: AppTheme.lightBackground,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Center(
+                  child: Container(
+                    width: 58,
+                    height: 58,
+                    decoration: BoxDecoration(
+                      color: AppTheme.error.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    child: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: AppTheme.error,
+                      size: 31,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Discard this recording?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                    color: primaryColor,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'This recording has not been saved yet.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.mutedText,
+                    height: 1.6,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                GestureDetector(
+                  onTap: () => Navigator.of(dialogContext).pop(true),
+                  child: Container(
+                    width: double.infinity,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: AppTheme.error,
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.error.withValues(alpha: 0.18),
+                          blurRadius: 15,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'Discard',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: AppTheme.lightBackground),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      backgroundColor: AppTheme.lightBackground,
+                      foregroundColor: primaryColor,
+                    ),
+                    onPressed: () => Navigator.of(dialogContext).pop(false),
+                    child: const Text(
+                      'Keep Recording',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    return result ?? false;
+  }
+
+  void _enterBatchManagement() {
+    setState(() {
+      _isBatchManaging = true;
+      _selectedMemoIds.clear();
+    });
+  }
+
+  void _exitBatchManagement() {
+    if (_isBatchDeleting) {
       return;
     }
 
-    if (_deleteActionMemoId != null) {
-      setState(() {
-        _deleteActionMemoId = null;
-      });
+    setState(() {
+      _isBatchManaging = false;
+      _selectedMemoIds.clear();
+    });
+  }
+
+  void _toggleMemoSelection(_MemoItem item) {
+    if (_isBatchDeleting) {
+      return;
+    }
+
+    setState(() {
+      if (_selectedMemoIds.contains(item.id)) {
+        _selectedMemoIds.remove(item.id);
+      } else {
+        _selectedMemoIds.add(item.id);
+      }
+    });
+  }
+
+  Future<void> _openMemoDetail(_MemoItem item) async {
+    if (_isBatchManaging) {
+      _toggleMemoSelection(item);
+      return;
     }
 
     if (item.isVoiceMemo) {
@@ -744,14 +1225,6 @@ class _MemoScreenState extends State<MemoScreen>
         ),
       );
     }
-
-    if (!mounted || _deleteActionMemoId == null) {
-      return;
-    }
-
-    setState(() {
-      _deleteActionMemoId = null;
-    });
   }
 
   String _cardDateLabel(DateTime date) {
@@ -772,8 +1245,8 @@ class _MemoScreenState extends State<MemoScreen>
     final mediaPadding = MediaQuery.of(context).padding;
     final statusBarHeight = mediaPadding.top;
     final bottomInset = mediaPadding.bottom;
-    final actionBottomOffset = bottomInset + 102;
-    final contentBottomSpacing = bottomInset + 122;
+    final actionBottomOffset = bottomInset + 112;
+    final contentBottomSpacing = bottomInset + 62;
     final staticBody = _buildStaticBody(
       statusBarHeight: statusBarHeight,
       contentBottomSpacing: contentBottomSpacing,
@@ -781,43 +1254,58 @@ class _MemoScreenState extends State<MemoScreen>
 
     return Scaffold(
       backgroundColor: bgColor,
-      body: ValueListenableBuilder<_VoiceUiState>(
-        valueListenable: _voiceUi,
-        child: staticBody,
-        builder: (context, voiceUi, child) {
-          return Stack(
-            children: [
-              child!,
-              SafeArea(
-                bottom: false,
-                child: Center(
-                  child: SizedBox(
-                    width: 430,
-                    height: double.infinity,
-                    child: Stack(
-                      children: [
-                        Positioned(
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          child: _buildHeader(),
-                        ),
-                        if (voiceUi.isOverlayVisible)
-                          Positioned.fill(child: _buildVoiceComposerOverlay()),
-                        Positioned(
-                          left: 20,
-                          right: 20,
-                          bottom: actionBottomOffset,
-                          child: _buildBottomActionRow(),
-                        ),
-                      ],
+      body: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) {
+          if (_showRecordButtonHint) {
+            unawaited(_hideRecordButtonHint());
+          }
+        },
+        child: ValueListenableBuilder<_VoiceUiState>(
+          valueListenable: _voiceUi,
+          child: staticBody,
+          builder: (context, voiceUi, child) {
+            return Stack(
+              children: [
+                child!,
+                SafeArea(
+                  bottom: false,
+                  child: Center(
+                    child: SizedBox(
+                      width: 430,
+                      height: double.infinity,
+                      child: Stack(
+                        children: [
+                          Positioned(
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            child: _buildHeader(),
+                          ),
+                          if (voiceUi.isOverlayVisible)
+                            Positioned.fill(
+                              child: _buildVoiceComposerOverlay(),
+                            ),
+                          if (!voiceUi.isRecordingSessionActive)
+                            Positioned(
+                              right: 24,
+                              bottom: actionBottomOffset + 74,
+                              child: _buildRecordButtonHint(),
+                            ),
+                          Positioned(
+                            right: 24,
+                            bottom: actionBottomOffset,
+                            child: _buildBottomActionRow(),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -879,8 +1367,46 @@ class _MemoScreenState extends State<MemoScreen>
   }
 
   Widget _buildHeader() {
-    return AppTodayTopBar(
-      title: DateFormat('d MMMM').format(DateTime.now()),
+    return Stack(
+      children: [
+        AppTodayTopBar(
+          title: DateFormat('d MMMM').format(DateTime.now()),
+          showNotifications: false,
+        ),
+        Positioned(top: 10, right: 24, child: _buildHeaderActions()),
+      ],
+    );
+  }
+
+  Widget _buildHeaderActions() {
+    if (_isBatchManaging) {
+      final canDelete = _selectedMemoIds.isNotEmpty && !_isBatchDeleting;
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _HeaderActionButton(
+            icon: Icons.delete_outline_rounded,
+            tooltip: 'Delete selected notes',
+            color: canDelete ? AppTheme.error : AppTheme.inactiveIcon,
+            isBusy: _isBatchDeleting,
+            onTap: canDelete ? _confirmAndDeleteSelectedMemos : null,
+          ),
+          const SizedBox(width: 8),
+          _HeaderActionButton(
+            icon: Icons.close_rounded,
+            tooltip: 'Done',
+            color: accentColor,
+            onTap: _exitBatchManagement,
+          ),
+        ],
+      );
+    }
+
+    return _HeaderActionButton(
+      icon: Icons.more_horiz_rounded,
+      tooltip: 'Manage notes',
+      color: accentColor,
+      onTap: _enterBatchManagement,
     );
   }
 
@@ -930,6 +1456,10 @@ class _MemoScreenState extends State<MemoScreen>
         }
 
         final sections = _buildSections(snapshot.data ?? const <MemoRecord>[]);
+        final entries = _buildListEntries(sections);
+        _lastMemoItems = sections
+            .expand((section) => section.items)
+            .toList(growable: false);
         if (sections.isEmpty) {
           return const Center(
             child: Padding(
@@ -948,87 +1478,115 @@ class _MemoScreenState extends State<MemoScreen>
           );
         }
 
-        return SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 128),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: sections
-                  .map((section) => _buildSection(section))
-                  .toList(growable: false),
-            ),
-          ),
+        return ListView.builder(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 128),
+          itemCount: entries.length,
+          itemBuilder: (context, index) {
+            final entry = entries[index];
+            final sectionTitle = entry.sectionTitle;
+            if (sectionTitle != null) {
+              return _buildSectionHeader(sectionTitle);
+            }
+
+            return _buildMemoListItem(entry.item!);
+          },
         );
       },
     );
   }
 
-  Widget _buildSection(_MemoSection section) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 8),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Text(
-            section.title.toUpperCase(),
-            style: const TextStyle(
-              color: accentColor,
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.4,
-            ),
-          ),
+  List<_MemoListEntry> _buildListEntries(List<_MemoSection> sections) {
+    final entries = <_MemoListEntry>[];
+    for (final section in sections) {
+      entries.add(_MemoListEntry.header(section.title));
+      for (final item in section.items) {
+        entries.add(_MemoListEntry.item(item));
+      }
+    }
+    return entries;
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
+      child: Text(
+        title.toUpperCase(),
+        style: const TextStyle(
+          color: accentColor,
+          fontSize: 14,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1.4,
         ),
-        const SizedBox(height: 16),
-        ...section.items.map(
-          (item) => Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: _MemoCard(
-              item: item,
-              showDeleteAction: _deleteActionMemoId == item.id,
-              isDeleting: _deletingMemoId == item.id,
-              onLongPress: () {
-                setState(() {
-                  _deleteActionMemoId = item.id;
-                });
-              },
-              onTap: () {
-                _openMemoDetail(item);
-              },
-              onDeleteTap: () => _confirmAndDeleteMemo(item),
-            ),
-          ),
-        ),
-      ],
+      ),
+    );
+  }
+
+  Widget _buildMemoListItem(_MemoItem item) {
+    final isDeleting =
+        _deletingMemoId == item.id || _batchDeletingMemoIds.contains(item.id);
+    final card = _MemoCard(
+      key: ValueKey(item.id),
+      item: item,
+      isSelectionMode: _isBatchManaging,
+      isSelected: _selectedMemoIds.contains(item.id),
+      isDeleting: isDeleting,
+      onTap: () {
+        _openMemoDetail(item);
+      },
+    );
+
+    return RepaintBoundary(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: _isBatchManaging
+            ? card
+            : _SwipeRevealDelete(
+                isEnabled: !isDeleting,
+                isDeleting: isDeleting,
+                onDelete: () => _confirmAndDeleteMemo(item),
+                child: card,
+              ),
+      ),
     );
   }
 
   Widget _buildBottomActionRow() {
-    return SizedBox(
-      height: 84,
-      child: _isVoiceOverlayVisible
-          ? Align(alignment: Alignment.center, child: _buildRecordButton())
-          : Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildMemoActionButton(
-                  icon: Icons.edit_note_rounded,
-                  semanticLabel: 'Text note',
-                  onTap: _openNewMemo,
-                  backgroundColor: Colors.white.withValues(alpha: 0.96),
-                  iconColor: primaryColor,
-                ),
-                const SizedBox(width: 18),
-                _buildMemoActionButton(
-                  icon: Icons.mic_rounded,
-                  semanticLabel: 'Voice note',
-                  onTap: _startVoiceMemoCreation,
-                  backgroundColor: const Color(0xFFFFF4C7),
-                  iconColor: const Color(0xFF9A6B00),
-                ),
-              ],
-            ),
+    if (!_isRecordingSessionActive) {
+      return _buildRecordButton();
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _RecordingControlButton(
+          icon: Icons.delete_outline_rounded,
+          color: AppTheme.error,
+          backgroundColor: Colors.white,
+          shadowColor: AppTheme.error.withValues(alpha: 0.16),
+          tooltip: 'Discard recording',
+          onTap: _confirmAndDiscardRecording,
+        ),
+        const SizedBox(width: 14),
+        _RecordingControlButton(
+          icon: _isRecordingPaused
+              ? Icons.play_arrow_rounded
+              : Icons.pause_rounded,
+          color: primaryColor,
+          backgroundColor: Colors.white,
+          shadowColor: Colors.black.withValues(alpha: 0.08),
+          tooltip: _isRecordingPaused ? 'Resume recording' : 'Pause recording',
+          onTap: _toggleRecordingPause,
+        ),
+        const SizedBox(width: 14),
+        _RecordingControlButton(
+          icon: Icons.check_rounded,
+          color: Colors.white,
+          backgroundColor: const Color(0xFF22C55E),
+          shadowColor: const Color(0xFF22C55E).withValues(alpha: 0.28),
+          tooltip: 'Save recording',
+          onTap: () => _stopVoiceMemoCreation(save: true),
+        ),
+      ],
     );
   }
 
@@ -1038,6 +1596,7 @@ class _MemoScreenState extends State<MemoScreen>
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
+      onLongPress: isBusy || isRecording ? null : _openNewTextMemo,
       onTap: isBusy
           ? null
           : isRecording
@@ -1045,8 +1604,8 @@ class _MemoScreenState extends State<MemoScreen>
           : _startVoiceMemoCreation,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        width: isRecording ? 80 : 72,
-        height: isRecording ? 80 : 72,
+        width: 64,
+        height: 64,
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: isRecording
@@ -1056,15 +1615,11 @@ class _MemoScreenState extends State<MemoScreen>
             end: Alignment.bottomRight,
           ),
           shape: BoxShape.circle,
-          border: Border.all(
-            color: Colors.white.withValues(alpha: isRecording ? 0.92 : 0.66),
-            width: isRecording ? 4 : 3,
-          ),
           boxShadow: [
             BoxShadow(
               color: (isRecording ? const Color(0xFFDC2626) : accentColor)
-                  .withValues(alpha: 0.28),
-              blurRadius: isRecording ? 30 : 24,
+                  .withValues(alpha: 0.3),
+              blurRadius: 25,
               offset: const Offset(0, 12),
             ),
           ],
@@ -1081,7 +1636,7 @@ class _MemoScreenState extends State<MemoScreen>
                 )
               : Icon(
                   isRecording ? Icons.stop_rounded : Icons.mic_rounded,
-                  size: isRecording ? 34 : 32,
+                  size: 28,
                   color: Colors.white,
                 ),
         ),
@@ -1089,36 +1644,50 @@ class _MemoScreenState extends State<MemoScreen>
     );
   }
 
-  Widget _buildMemoActionButton({
-    GlobalKey? buttonKey,
-    required IconData icon,
-    required String semanticLabel,
-    required VoidCallback onTap,
-    required Color backgroundColor,
-    required Color iconColor,
-  }) {
-    return GestureDetector(
-      key: buttonKey,
-      onTap: onTap,
-      child: Semantics(
-        label: semanticLabel,
-        button: true,
-        child: Container(
-          width: 56,
-          height: 56,
-          decoration: BoxDecoration(
-            color: backgroundColor,
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white.withValues(alpha: 0.86)),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF0F172A).withValues(alpha: 0.08),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
+  Widget _buildRecordButtonHint() {
+    final hintAnimation = _recordButtonHintController;
+
+    return SizedBox(
+      height: 36,
+      child: IgnorePointer(
+        ignoring: true,
+        child: hintAnimation == null
+            ? Opacity(
+                opacity: _showRecordButtonHint ? 1 : 0,
+                child: _buildRecordButtonHintPill(),
+              )
+            : FadeTransition(
+                opacity: CurvedAnimation(
+                  parent: hintAnimation,
+                  curve: Curves.easeOutCubic,
+                ),
+                child: _buildRecordButtonHintPill(),
               ),
-            ],
+      ),
+    );
+  }
+
+  Widget _buildRecordButtonHintPill() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFF1E8D8)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
           ),
-          child: Icon(icon, color: iconColor, size: 24),
+        ],
+      ),
+      child: const Text(
+        'Tap for voice, hold for text',
+        style: TextStyle(
+          color: AppTheme.accent,
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
         ),
       ),
     );
@@ -1142,25 +1711,6 @@ class _MemoScreenState extends State<MemoScreen>
             padding: const EdgeInsets.fromLTRB(24, 96, 24, 188),
             child: Column(
               children: [
-                if (_isRecordingSessionActive && !_isCreatingVoiceMemo)
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Tooltip(
-                      message: 'Cancel',
-                      child: IconButton(
-                        onPressed: _isVoiceTransitioning
-                            ? null
-                            : () => _stopVoiceMemoCreation(save: false),
-                        icon: const Icon(Icons.close_rounded, size: 22),
-                        color: const Color(0xFF475569),
-                        style: IconButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: 0.88),
-                          fixedSize: const Size(44, 44),
-                          shape: const CircleBorder(),
-                        ),
-                      ),
-                    ),
-                  ),
                 const Spacer(),
                 RepaintBoundary(child: _buildVoiceWaveBubble()),
                 const SizedBox(height: 18),
@@ -1176,6 +1726,8 @@ class _MemoScreenState extends State<MemoScreen>
   Widget _buildVoiceWaveBubble() {
     final bubbleColor = _isCreatingVoiceMemo
         ? const Color(0xFFFFF8E3)
+        : _isRecordingPaused
+        ? const Color(0xFFF8FAFC)
         : _isRecordingSessionActive
         ? const Color(0xFFFFF1C9)
         : const Color(0xFFF8FAFC);
@@ -1212,11 +1764,17 @@ class _MemoScreenState extends State<MemoScreen>
                     ),
                   )
                 : _isRecordingSessionActive
-                ? _VoiceBars(
-                    animation: _voiceBarsController,
-                    level: _soundLevel,
-                    color: waveColor,
-                  )
+                ? _isRecordingPaused
+                      ? const Icon(
+                          Icons.pause_rounded,
+                          size: 42,
+                          color: Color(0xFF64748B),
+                        )
+                      : _VoiceBars(
+                          animation: _voiceBarsController,
+                          level: _soundLevel,
+                          color: waveColor,
+                        )
                 : const Icon(
                     Icons.mic_none_rounded,
                     size: 40,
@@ -1268,13 +1826,21 @@ class _MemoScreenState extends State<MemoScreen>
                 width: 10,
                 height: 10,
                 decoration: BoxDecoration(
-                  color: _isListening ? const Color(0xFFEF4444) : accentColor,
+                  color: _isListening
+                      ? const Color(0xFFEF4444)
+                      : _isRecordingPaused
+                      ? const Color(0xFF64748B)
+                      : accentColor,
                   shape: BoxShape.circle,
                 ),
               ),
               const SizedBox(width: 8),
               Text(
-                _isRecordingSessionActive ? 'Recording audio' : 'Voice note',
+                _isRecordingPaused
+                    ? 'Recording paused'
+                    : _isRecordingSessionActive
+                    ? 'Recording audio'
+                    : 'Voice note',
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w800,
@@ -1308,12 +1874,58 @@ class _MemoScreenState extends State<MemoScreen>
   }
 }
 
+class _RecordingControlButton extends StatelessWidget {
+  const _RecordingControlButton({
+    required this.icon,
+    required this.color,
+    required this.backgroundColor,
+    required this.shadowColor,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color color;
+  final Color backgroundColor;
+  final Color shadowColor;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: shadowColor,
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Center(child: Icon(icon, color: color, size: 28)),
+        ),
+      ),
+    );
+  }
+}
+
 class _VoiceUiState {
   const _VoiceUiState({
     this.isListening = false,
     this.isVoiceTransitioning = false,
     this.isRecordingSessionActive = false,
     this.isCreatingVoiceMemo = false,
+    this.isRecordingPaused = false,
     this.soundLevel = 0,
     this.elapsed = Duration.zero,
   });
@@ -1322,6 +1934,7 @@ class _VoiceUiState {
   final bool isVoiceTransitioning;
   final bool isRecordingSessionActive;
   final bool isCreatingVoiceMemo;
+  final bool isRecordingPaused;
   final double soundLevel;
   final Duration elapsed;
 
@@ -1336,6 +1949,7 @@ class _VoiceUiState {
     bool? isVoiceTransitioning,
     bool? isRecordingSessionActive,
     bool? isCreatingVoiceMemo,
+    bool? isRecordingPaused,
     double? soundLevel,
     Duration? elapsed,
   }) {
@@ -1345,6 +1959,7 @@ class _VoiceUiState {
       isRecordingSessionActive:
           isRecordingSessionActive ?? this.isRecordingSessionActive,
       isCreatingVoiceMemo: isCreatingVoiceMemo ?? this.isCreatingVoiceMemo,
+      isRecordingPaused: isRecordingPaused ?? this.isRecordingPaused,
       soundLevel: soundLevel ?? this.soundLevel,
       elapsed: elapsed ?? this.elapsed,
     );
@@ -1361,6 +1976,7 @@ class _VoiceUiState {
         other.isVoiceTransitioning == isVoiceTransitioning &&
         other.isRecordingSessionActive == isRecordingSessionActive &&
         other.isCreatingVoiceMemo == isCreatingVoiceMemo &&
+        other.isRecordingPaused == isRecordingPaused &&
         other.soundLevel == soundLevel &&
         other.elapsed == elapsed;
   }
@@ -1371,6 +1987,7 @@ class _VoiceUiState {
     isVoiceTransitioning,
     isRecordingSessionActive,
     isCreatingVoiceMemo,
+    isRecordingPaused,
     soundLevel,
     elapsed,
   );
@@ -1510,6 +2127,15 @@ class _MemoSection {
   const _MemoSection({required this.title, required this.items});
 }
 
+class _MemoListEntry {
+  final String? sectionTitle;
+  final _MemoItem? item;
+
+  const _MemoListEntry.header(this.sectionTitle) : item = null;
+
+  const _MemoListEntry.item(this.item) : sectionTitle = null;
+}
+
 class _MemoItem {
   final String id;
   final String title;
@@ -1538,20 +2164,135 @@ class _MemoItem {
   });
 }
 
+class _SwipeRevealDelete extends StatefulWidget {
+  final Widget child;
+  final bool isEnabled;
+  final bool isDeleting;
+  final VoidCallback onDelete;
+
+  const _SwipeRevealDelete({
+    required this.child,
+    required this.isEnabled,
+    required this.isDeleting,
+    required this.onDelete,
+  });
+
+  @override
+  State<_SwipeRevealDelete> createState() => _SwipeRevealDeleteState();
+}
+
+class _SwipeRevealDeleteState extends State<_SwipeRevealDelete> {
+  static const double _revealWidth = 72;
+  double _offset = 0;
+
+  void _setOffset(double value) {
+    setState(() {
+      _offset = value.clamp(0, _revealWidth).toDouble();
+    });
+  }
+
+  void _settleOffset() {
+    _setOffset(_offset > _revealWidth * 0.42 ? _revealWidth : 0);
+  }
+
+  @override
+  void didUpdateWidget(covariant _SwipeRevealDelete oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if ((!widget.isEnabled || widget.isDeleting) && _offset != 0) {
+      _offset = 0;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: widget.isEnabled ? widget.onDelete : null,
+                child: Container(
+                  width: _revealWidth,
+                  height: double.infinity,
+                  color: Colors.transparent,
+                  child: Center(
+                    child: widget.isDeleting
+                        ? Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: AppTheme.error.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(99),
+                            ),
+                            child: const Center(
+                              child: SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    AppTheme.error,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          )
+                        : Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: AppTheme.error.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(99),
+                            ),
+                            child: const Icon(
+                              Icons.delete_outline_rounded,
+                              color: AppTheme.error,
+                              size: 22,
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onHorizontalDragUpdate: widget.isEnabled
+                ? (details) => _setOffset(_offset - details.delta.dx)
+                : null,
+            onHorizontalDragEnd: widget.isEnabled
+                ? (_) => _settleOffset()
+                : null,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              curve: Curves.easeOutCubic,
+              transform: Matrix4.translationValues(-_offset, 0, 0),
+              child: widget.child,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _MemoCard extends StatelessWidget {
   final _MemoItem item;
   final VoidCallback? onTap;
-  final VoidCallback? onLongPress;
-  final VoidCallback? onDeleteTap;
-  final bool showDeleteAction;
+  final bool isSelectionMode;
+  final bool isSelected;
   final bool isDeleting;
 
   const _MemoCard({
+    super.key,
     required this.item,
     this.onTap,
-    this.onLongPress,
-    this.onDeleteTap,
-    this.showDeleteAction = false,
+    this.isSelectionMode = false,
+    this.isSelected = false,
     this.isDeleting = false,
   });
 
@@ -1565,19 +2306,23 @@ class _MemoCard extends StatelessWidget {
         : (isVoice ? _MemoScreenState._voiceMemoEmptyNotePreview : '');
     final icon = isVoice ? Icons.mic_rounded : Icons.edit_note_rounded;
     final iconColor = _MemoScreenState.accentColor;
-    final iconBackground = _MemoScreenState.accentColor.withOpacity(0.1);
+    final iconBackground = _MemoScreenState.accentColor.withValues(alpha: 0.1);
 
     final card = Container(
       constraints: const BoxConstraints(minHeight: 100),
       decoration: BoxDecoration(
         color: cardColor,
-        border: Border.all(color: borderColor),
+        border: Border.all(
+          color: isSelected ? _MemoScreenState.accentColor : borderColor,
+          width: isSelected ? 1.4 : 1,
+        ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
+            color: (isSelected ? _MemoScreenState.accentColor : Colors.black)
+                .withValues(alpha: isSelected ? 0.12 : 0.05),
+            blurRadius: isSelected ? 12 : 2,
+            offset: Offset(0, isSelected ? 4 : 1),
           ),
         ],
       ),
@@ -1588,6 +2333,10 @@ class _MemoCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              if (isSelectionMode) ...[
+                _MemoSelectionIndicator(isSelected: isSelected),
+                const SizedBox(width: 10),
+              ],
               Container(
                 width: 34,
                 height: 34,
@@ -1639,96 +2388,106 @@ class _MemoCard extends StatelessWidget {
 
     return GestureDetector(
       onTap: onTap,
-      onLongPress: onLongPress,
       behavior: HitTestBehavior.opaque,
       child: Stack(
-        clipBehavior: Clip.none,
+        alignment: Alignment.center,
         children: [
           card,
-          Positioned(
-            top: -10,
-            right: -8,
-            child: AnimatedScale(
-              scale: showDeleteAction ? 1 : 0,
-              duration: const Duration(milliseconds: 160),
-              curve: Curves.easeOutBack,
-              child: AnimatedOpacity(
-                opacity: showDeleteAction ? 1 : 0,
-                duration: const Duration(milliseconds: 120),
-                child: IgnorePointer(
-                  ignoring: !showDeleteAction || isDeleting,
-                  child: GestureDetector(
-                    onTap: onDeleteTap,
-                    child: Container(
-                      width: 42,
-                      height: 42,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(
-                          color: AppTheme.error.withValues(alpha: 0.12),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppTheme.error.withValues(alpha: 0.16),
-                            blurRadius: 14,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      child: Center(
-                        child: isDeleting
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppTheme.error,
-                                ),
-                              )
-                            : const Icon(
-                                Icons.delete_outline_rounded,
-                                color: AppTheme.error,
-                                size: 23,
-                              ),
-                      ),
+          if (isDeleting)
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.62),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: const Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.4,
+                      color: AppTheme.error,
                     ),
                   ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );
   }
 }
 
-class _SpotlightPainter extends CustomPainter {
-  const _SpotlightPainter({required this.targetRect});
+class _MemoSelectionIndicator extends StatelessWidget {
+  final bool isSelected;
 
-  final Rect targetRect;
+  const _MemoSelectionIndicator({required this.isSelected});
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final overlayPath = Path()
-      ..fillType = PathFillType.evenOdd
-      ..addRect(Rect.fromLTWH(0, 0, size.width, size.height))
-      ..addRRect(
-        RRect.fromRectAndRadius(
-          targetRect.inflate(12),
-          const Radius.circular(20),
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      width: 24,
+      height: 24,
+      decoration: BoxDecoration(
+        color: isSelected ? _MemoScreenState.accentColor : Colors.white,
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(
+          color: isSelected
+              ? _MemoScreenState.accentColor
+              : const Color(0xFFE2E8F0),
+          width: 1.6,
         ),
-      );
-
-    canvas.drawPath(
-      overlayPath,
-      Paint()..color = const Color(0xB3000000),
+      ),
+      child: isSelected
+          ? const Icon(Icons.check_rounded, color: Colors.white, size: 17)
+          : null,
     );
   }
+}
+
+class _HeaderActionButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final Color color;
+  final bool isBusy;
+  final VoidCallback? onTap;
+
+  const _HeaderActionButton({
+    required this.icon,
+    required this.tooltip,
+    required this.color,
+    this.isBusy = false,
+    this.onTap,
+  });
 
   @override
-  bool shouldRepaint(covariant _SpotlightPainter oldDelegate) {
-    return oldDelegate.targetRect != targetRect;
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: isBusy ? null : onTap,
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: onTap == null ? 0.08 : 0.1),
+            borderRadius: BorderRadius.circular(48),
+          ),
+          child: Center(
+            child: isBusy
+                ? SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.2,
+                      valueColor: AlwaysStoppedAnimation<Color>(color),
+                    ),
+                  )
+                : Icon(icon, size: 16, color: color),
+          ),
+        ),
+      ),
+    );
   }
 }
