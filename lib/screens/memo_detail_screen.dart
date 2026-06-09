@@ -61,6 +61,7 @@ class _MemoDetailScreenState extends State<MemoDetailScreen> {
   bool _isSaving = false;
   bool _isAnalyzingTask = false;
   bool _isDeleting = false;
+  bool _isDiscardingOrDeleted = false;
 
   bool get _hasChanges {
     return _titleController.text.trim() != _originalTitle.trim() ||
@@ -70,11 +71,14 @@ class _MemoDetailScreenState extends State<MemoDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _originalTitle = widget.title;
+    final initialTitle = widget.isCreating && widget.title.trim().isEmpty
+        ? _autoTitle(DateTime.now())
+        : widget.title;
+    _originalTitle = initialTitle;
     _originalBody = widget.body;
     _isCreatingMode = widget.isCreating;
     _currentMemoId = widget.memoId;
-    _titleController = TextEditingController(text: widget.title)
+    _titleController = TextEditingController(text: initialTitle)
       ..addListener(_handleFieldChanged);
     _bodyController = TextEditingController(text: widget.body)
       ..addListener(_handleBodyChanged);
@@ -140,6 +144,10 @@ class _MemoDetailScreenState extends State<MemoDetailScreen> {
     bool popAfterCreate = false,
     bool showSuccessMessage = false,
   }) async {
+    if (_isDiscardingOrDeleted) {
+      return null;
+    }
+
     final user = FirebaseAuth.instance.currentUser;
     final title = _titleController.text.trim();
     final body = _bodyController.text.trim();
@@ -159,7 +167,9 @@ class _MemoDetailScreenState extends State<MemoDetailScreen> {
       return null;
     }
 
-    final effectiveTitle = title.isNotEmpty ? title : _fallbackTitle(body);
+    final effectiveTitle = title.isNotEmpty
+        ? title
+        : (_isCreatingMode ? _autoTitle(DateTime.now()) : _fallbackTitle(body));
 
     setState(() {
       _isSaving = true;
@@ -265,7 +275,7 @@ class _MemoDetailScreenState extends State<MemoDetailScreen> {
   void _scheduleAutosave() {
     _autosaveTimer?.cancel();
 
-    if (_isSaving || _isAnalyzingTask) {
+    if (_isSaving || _isAnalyzingTask || _isDiscardingOrDeleted) {
       return;
     }
 
@@ -287,7 +297,11 @@ class _MemoDetailScreenState extends State<MemoDetailScreen> {
     _autosaveTimer?.cancel();
     _autosaveTimer = null;
 
-    if (_isSaving || _isAnalyzingTask || !_hasChanges || !_hasSavableContent) {
+    if (_isSaving ||
+        _isAnalyzingTask ||
+        _isDiscardingOrDeleted ||
+        !_hasChanges ||
+        !_hasSavableContent) {
       return;
     }
 
@@ -303,6 +317,13 @@ class _MemoDetailScreenState extends State<MemoDetailScreen> {
 
   Future<void> _handleBackNavigation() async {
     _dismissKeyboard();
+    if (_isDiscardingOrDeleted) {
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      return;
+    }
+
     await _flushAutosave();
     if (!mounted) {
       return;
@@ -321,6 +342,16 @@ class _MemoDetailScreenState extends State<MemoDetailScreen> {
       return firstLine;
     }
     return firstLine.substring(0, _generatedTitleLength).trimRight();
+  }
+
+  String _autoTitle(DateTime createdAt) {
+    final local = createdAt.toLocal();
+    final year = local.year.toString().padLeft(4, '0');
+    final month = local.month.toString().padLeft(2, '0');
+    final day = local.day.toString().padLeft(2, '0');
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '$year-$month-$day $hour:$minute';
   }
 
   void _showMessage(String message) {
@@ -456,11 +487,17 @@ class _MemoDetailScreenState extends State<MemoDetailScreen> {
   }
 
   Future<void> _confirmAndDeleteMemo() async {
-    if (_isDeleting || _isSaving || _isAnalyzingTask) {
+    if (_isDeleting ||
+        _isSaving ||
+        _isAnalyzingTask ||
+        _isDiscardingOrDeleted) {
       return;
     }
 
     if (_isCreatingMode || _currentMemoId.isEmpty) {
+      _dismissKeyboard();
+      _autosaveTimer?.cancel();
+      _isDiscardingOrDeleted = true;
       Navigator.of(context).pop();
       return;
     }
@@ -487,6 +524,7 @@ class _MemoDetailScreenState extends State<MemoDetailScreen> {
         return;
       }
 
+      _isDiscardingOrDeleted = true;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(

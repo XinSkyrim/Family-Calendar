@@ -26,8 +26,7 @@ class MemoScreen extends StatefulWidget {
   State<MemoScreen> createState() => _MemoScreenState();
 }
 
-class _MemoScreenState extends State<MemoScreen>
-    with SingleTickerProviderStateMixin {
+class _MemoScreenState extends State<MemoScreen> with TickerProviderStateMixin {
   static const bgColor = AppTheme.pageBackground;
   static const primaryColor = Color(0xFF0F172A);
   static const accentColor = Color(0xFFE2B736);
@@ -46,12 +45,14 @@ class _MemoScreenState extends State<MemoScreen>
   List<_MemoItem> _lastMemoItems = const <_MemoItem>[];
   final AudioRecorder _audioRecorder = AudioRecorder();
   late final AnimationController _voiceBarsController;
+  AnimationController? _recordButtonHintController;
   late final ValueNotifier<_VoiceUiState> _voiceUi;
   StreamSubscription<Amplitude>? _recordingAmplitudeSub;
   Timer? _recordingTimer;
   DateTime? _recordingStartedAt;
   Duration _recordingAccumulatedElapsed = Duration.zero;
   String? _activeRecordingPath;
+  bool _showRecordButtonHint = false;
 
   bool get _isListening => _voiceUi.value.isListening;
   bool get _isVoiceTransitioning => _voiceUi.value.isVoiceTransitioning;
@@ -69,6 +70,12 @@ class _MemoScreenState extends State<MemoScreen>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
+    _recordButtonHintController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 520),
+    );
+    _showRecordButtonHint = true;
+    _recordButtonHintController?.forward(from: 0);
   }
 
   @override
@@ -78,8 +85,23 @@ class _MemoScreenState extends State<MemoScreen>
     unawaited(WakelockPlus.disable());
     _voiceUi.dispose();
     _voiceBarsController.dispose();
+    _recordButtonHintController?.dispose();
     _audioRecorder.dispose();
     super.dispose();
+  }
+
+  Future<void> _hideRecordButtonHint() async {
+    if (!_showRecordButtonHint ||
+        _recordButtonHintController?.status == AnimationStatus.dismissed) {
+      return;
+    }
+
+    _showRecordButtonHint = false;
+    await _recordButtonHintController?.reverse();
+  }
+
+  Future<void> _markRecordButtonHintSeen() async {
+    await _hideRecordButtonHint();
   }
 
   void _updateVoiceUi(_VoiceUiState Function(_VoiceUiState current) transform) {
@@ -142,6 +164,7 @@ class _MemoScreenState extends State<MemoScreen>
       return;
     }
 
+    unawaited(_markRecordButtonHintSeen());
     final hasPermission = await _audioRecorder.hasPermission();
     if (!hasPermission) {
       _showMessage(
@@ -219,6 +242,21 @@ class _MemoScreenState extends State<MemoScreen>
       _resetVoiceOverlay();
       _showMessage('Unable to start recording. Please try again.');
     }
+  }
+
+  Future<void> _openNewTextMemo() async {
+    if (_isVoiceTransitioning ||
+        _isCreatingVoiceMemo ||
+        _isRecordingSessionActive) {
+      return;
+    }
+
+    unawaited(_markRecordButtonHintSeen());
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const MemoDetailScreen(isCreating: true),
+      ),
+    );
   }
 
   Duration _currentRecordingElapsed() {
@@ -1216,42 +1254,58 @@ class _MemoScreenState extends State<MemoScreen>
 
     return Scaffold(
       backgroundColor: bgColor,
-      body: ValueListenableBuilder<_VoiceUiState>(
-        valueListenable: _voiceUi,
-        child: staticBody,
-        builder: (context, voiceUi, child) {
-          return Stack(
-            children: [
-              child!,
-              SafeArea(
-                bottom: false,
-                child: Center(
-                  child: SizedBox(
-                    width: 430,
-                    height: double.infinity,
-                    child: Stack(
-                      children: [
-                        Positioned(
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          child: _buildHeader(),
-                        ),
-                        if (voiceUi.isOverlayVisible)
-                          Positioned.fill(child: _buildVoiceComposerOverlay()),
-                        Positioned(
-                          right: 24,
-                          bottom: actionBottomOffset,
-                          child: _buildBottomActionRow(),
-                        ),
-                      ],
+      body: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) {
+          if (_showRecordButtonHint) {
+            unawaited(_hideRecordButtonHint());
+          }
+        },
+        child: ValueListenableBuilder<_VoiceUiState>(
+          valueListenable: _voiceUi,
+          child: staticBody,
+          builder: (context, voiceUi, child) {
+            return Stack(
+              children: [
+                child!,
+                SafeArea(
+                  bottom: false,
+                  child: Center(
+                    child: SizedBox(
+                      width: 430,
+                      height: double.infinity,
+                      child: Stack(
+                        children: [
+                          Positioned(
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            child: _buildHeader(),
+                          ),
+                          if (voiceUi.isOverlayVisible)
+                            Positioned.fill(
+                              child: _buildVoiceComposerOverlay(),
+                            ),
+                          if (!voiceUi.isRecordingSessionActive)
+                            Positioned(
+                              right: 24,
+                              bottom: actionBottomOffset + 74,
+                              child: _buildRecordButtonHint(),
+                            ),
+                          Positioned(
+                            right: 24,
+                            bottom: actionBottomOffset,
+                            child: _buildBottomActionRow(),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -1542,6 +1596,7 @@ class _MemoScreenState extends State<MemoScreen>
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
+      onLongPress: isBusy || isRecording ? null : _openNewTextMemo,
       onTap: isBusy
           ? null
           : isRecording
@@ -1584,6 +1639,55 @@ class _MemoScreenState extends State<MemoScreen>
                   size: 28,
                   color: Colors.white,
                 ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRecordButtonHint() {
+    final hintAnimation = _recordButtonHintController;
+
+    return SizedBox(
+      height: 36,
+      child: IgnorePointer(
+        ignoring: true,
+        child: hintAnimation == null
+            ? Opacity(
+                opacity: _showRecordButtonHint ? 1 : 0,
+                child: _buildRecordButtonHintPill(),
+              )
+            : FadeTransition(
+                opacity: CurvedAnimation(
+                  parent: hintAnimation,
+                  curve: Curves.easeOutCubic,
+                ),
+                child: _buildRecordButtonHintPill(),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildRecordButtonHintPill() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFF1E8D8)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: const Text(
+        'Tap for voice, hold for text',
+        style: TextStyle(
+          color: AppTheme.accent,
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
         ),
       ),
     );

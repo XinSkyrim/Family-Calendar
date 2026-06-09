@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -10,21 +9,20 @@ import '../models/task.dart';
 import '../navigation/app_bottom_nav.dart';
 import '../themes/app_theme.dart';
 import '../widgets/app_today_top_bar.dart';
-import '../widgets/avatar_image.dart';
 import '../widgets/bottom_navigation_bar.dart';
 import '../widgets/event_card.dart';
 import 'add_task_screen.dart';
 import 'edit_task_screen.dart';
-import 'notifications_screen.dart';
 
 class CalendarScreen extends StatefulWidget {
-  const CalendarScreen({Key? key}) : super(key: key);
+  const CalendarScreen({super.key});
 
   @override
   State<CalendarScreen> createState() => _CalendarScreenState();
 }
 
-class _CalendarScreenState extends State<CalendarScreen> {
+class _CalendarScreenState extends State<CalendarScreen>
+    with TickerProviderStateMixin {
   static const bgColor = AppTheme.pageBackground;
   static const primaryColor = AppTheme.headline;
   static const accentColor = AppTheme.accent;
@@ -33,20 +31,22 @@ class _CalendarScreenState extends State<CalendarScreen> {
   static const _hourRowHeight = 50.0;
   static const _leftTimeWidth = 60.0;
   static const _timelineGap = 16.0;
-  static const _eventCardHeight = 168.0;
   static const _lineTopOffset = 18.0;
   static const _cardTopGapFromMarker = 0.0;
   static const _cardBottomGap = 14.0;
   static const _dateItemWidth = 70.0;
   static const _dateItemSpacing = 8.0;
   static const _dateHorizontalPadding = 16.0;
+  static const _hintTextColor = AppTheme.accent;
 
   final ScrollController _dateScrollController = ScrollController();
+  AnimationController? _addTaskHintController;
   Stream<QuerySnapshot<Map<String, dynamic>>>? _eventsStream;
   List<_CalendarEvent> _cachedEvents = <_CalendarEvent>[];
-  int _selectedNavIndex = 1;
+  final int _selectedNavIndex = 1;
   late final List<DateTime> _days;
   late int _selectedDayIndex;
+  bool _showAddTaskHint = true;
 
   @override
   void initState() {
@@ -54,6 +54,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final user = FirebaseAuth.instance.currentUser;
+    _addTaskHintController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 520),
+    )..forward(from: 0);
 
     _days = List.generate(
       7,
@@ -76,6 +80,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   @override
   void dispose() {
+    _addTaskHintController?.dispose();
     _dateScrollController.dispose();
     super.dispose();
   }
@@ -119,198 +124,90 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
     return Scaffold(
       backgroundColor: bgColor,
-      body: Stack(
-        children: [
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: statusBarHeight,
-            child: const ColoredBox(color: AppTheme.headerBackground),
-          ),
-          SafeArea(
-            bottom: false,
-            child: Center(
-              child: Container(
-                width: 430,
-                constraints: const BoxConstraints(maxWidth: 430),
-                height: double.infinity,
-                color: bgColor,
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 74),
-                          Padding(
-                            padding: const EdgeInsets.only(top: 10),
-                            child: _buildDateSelector(),
-                          ),
-                          const SizedBox(height: 8),
-                          Expanded(child: _buildTimeline(context)),
-                          const SizedBox.shrink(),
-                        ],
+      body: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) {
+          if (_showAddTaskHint) {
+            _hideAddTaskHint();
+          }
+        },
+        child: Stack(
+          children: [
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: statusBarHeight,
+              child: const ColoredBox(color: AppTheme.headerBackground),
+            ),
+            SafeArea(
+              bottom: false,
+              child: Center(
+                child: Container(
+                  width: 430,
+                  constraints: const BoxConstraints(maxWidth: 430),
+                  height: double.infinity,
+                  color: bgColor,
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: Column(
+                          children: [
+                            const SizedBox(height: 74),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 10),
+                              child: _buildDateSelector(),
+                            ),
+                            const SizedBox(height: 8),
+                            Expanded(child: _buildTimeline(context)),
+                            const SizedBox.shrink(),
+                          ],
+                        ),
                       ),
-                    ),
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      child: _buildHeader(context),
-                    ),
-                    Positioned(
-                      right: 24,
-                      bottom: fabBottomOffset,
-                      child: _buildFab(context),
-                    ),
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      child: AppBottomNavigationBar(
-                        currentIndex: _selectedNavIndex,
-                        onItemTapped: (index) {
-                          navigateFromBottomNav(
-                            context,
-                            targetIndex: index,
-                            currentIndex: _selectedNavIndex,
-                          );
-                        },
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        child: _buildHeader(context),
                       ),
-                    ),
-                  ],
+                      Positioned(
+                        right: 24,
+                        bottom: fabBottomOffset + 74,
+                        child: _buildAddTaskHint(),
+                      ),
+                      Positioned(
+                        right: 24,
+                        bottom: fabBottomOffset,
+                        child: _buildFab(context),
+                      ),
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: AppBottomNavigationBar(
+                          currentIndex: _selectedNavIndex,
+                          onItemTapped: (index) {
+                            navigateFromBottomNav(
+                              context,
+                              targetIndex: index,
+                              currentIndex: _selectedNavIndex,
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildHeader(BuildContext context) {
     return AppTodayTopBar(title: DateFormat('d MMMM').format(_selectedDate));
-  }
-
-  Widget _buildHeaderAvatars() {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      return Row(children: [_buildAvatar('')]);
-    }
-
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || !snapshot.data!.exists) {
-          return Row(children: [_buildAvatar('')]);
-        }
-
-        final data = snapshot.data!.data();
-        final photoUrl = (data?['photoURL'] ?? '').toString().trim();
-
-        return Row(children: [_buildAvatar(photoUrl)]);
-      },
-    );
-  }
-
-  Widget _buildAvatar(String imageUrl, {double overlap = 0}) {
-    final hasImage = imageUrl.trim().isNotEmpty;
-
-    return Transform.translate(
-      offset: Offset(overlap, 0),
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: 2),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: ClipOval(
-          child: hasImage
-              ? AvatarImage(imageUrl: imageUrl)
-              : const AvatarImage(imageUrl: ''),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNotificationsButton(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-
-    return GestureDetector(
-      onTap: () => Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const NotificationsScreen())),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.5),
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 2,
-                  offset: const Offset(0, 1),
-                ),
-              ],
-            ),
-            child: const Center(
-              child: Icon(Icons.notifications, size: 18, color: primaryColor),
-            ),
-          ),
-          if (user != null)
-            StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collection('notifications')
-                  .where('recipientId', isEqualTo: user.uid)
-                  .where('isRead', isEqualTo: false)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                final count = snapshot.data?.docs.length ?? 0;
-                if (count == 0) return const SizedBox.shrink();
-
-                return Positioned(
-                  top: -4,
-                  right: -4,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 2,
-                    ),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFEF4444),
-                      borderRadius: BorderRadius.all(Radius.circular(999)),
-                    ),
-                    child: Text(
-                      count > 99 ? '99+' : '$count',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-        ],
-      ),
-    );
   }
 
   Widget _buildDateSelector() {
@@ -321,7 +218,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         padding: const EdgeInsets.symmetric(horizontal: _dateHorizontalPadding),
         scrollDirection: Axis.horizontal,
         itemCount: _days.length,
-        separatorBuilder: (_, __) => const SizedBox(width: _dateItemSpacing),
+        separatorBuilder: (_, index) => const SizedBox(width: _dateItemSpacing),
         itemBuilder: (context, index) {
           final day = _days[index];
           final selected = index == _selectedDayIndex;
@@ -337,7 +234,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
               decoration: BoxDecoration(
                 color: selected
                     ? const Color(0x22E2B736)
-                    : Colors.white.withOpacity(0.5),
+                    : Colors.white.withValues(alpha: 0.5),
                 border: Border.all(
                   color: selected ? accentColor : const Color(0xFFF1F5F9),
                   width: selected ? 2 : 1,
@@ -345,7 +242,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withValues(alpha: 0.05),
                     blurRadius: 2,
                     offset: const Offset(0, 1),
                   ),
@@ -449,27 +346,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
               startHour = 0;
               endHour = 23;
             } else {
-              final minHour = math.max(
-                0,
-                math.min(
-                  23,
-                  filteredEvents.map((e) => e.startTime.hour).reduce(math.min) -
-                      1,
-                ),
-              );
-
-              final maxHour = math.max(
-                minHour + 1,
-                math.min(
-                  23,
-                  filteredEvents
-                      .map(
-                        (e) => e.endTime.hour + (e.endTime.minute > 0 ? 1 : 0),
-                      )
-                      .reduce(math.max),
-                ),
-              );
-
               startHour = 0;
               endHour = 24;
             }
@@ -530,7 +406,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         children: flowItems.map((item) {
                           switch (item.type) {
                             case _FlowItemType.hourGap:
-                            case _FlowItemType.minuteGap:
                               return SizedBox(
                                 height: item.height,
                                 child: Align(
@@ -638,15 +513,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return items;
   }
 
-  _CalendarEvent? _nextEventAfter(
-    List<_CalendarEvent> events,
-    _CalendarEvent current,
-  ) {
-    final index = events.indexOf(current);
-    if (index == -1 || index + 1 >= events.length) return null;
-    return events[index + 1];
-  }
-
   String _ellipsisTitle(String text) {
     final value = text.trim();
     if (value.length <= 12) return value;
@@ -719,65 +585,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  Widget _emptyState() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.7),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFF1F5F9)),
-      ),
-      child: const Column(
-        children: [
-          Icon(Icons.event_available, color: Color(0xFF94A3B8), size: 28),
-          SizedBox(height: 12),
-          Text(
-            'No events for this day',
-            style: TextStyle(
-              color: Color(0xFF0F172A),
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTrailingIcon(_CalendarEvent event) {
-    IconData icon;
-    switch (event.eventType.toLowerCase()) {
-      case 'meeting':
-        icon = Icons.event;
-        break;
-      case 'health':
-        icon = Icons.favorite;
-        break;
-      case 'shopping':
-        icon = Icons.shopping_cart;
-        break;
-      case 'family':
-        icon = Icons.people;
-        break;
-      case 'education':
-        icon = Icons.school;
-        break;
-      default:
-        icon = Icons.event_note;
-    }
-
-    return Container(
-      width: 32,
-      height: 32,
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.6),
-        shape: BoxShape.circle,
-      ),
-      child: Center(child: Icon(icon, size: 18, color: primaryColor)),
-    );
-  }
-
   Color _eventColor(String eventType) {
     switch (eventType.toLowerCase()) {
       case 'meeting':
@@ -844,9 +651,69 @@ class _CalendarScreenState extends State<CalendarScreen> {
         localA.day == localB.day;
   }
 
+  void _hideAddTaskHint() {
+    if (!_showAddTaskHint ||
+        _addTaskHintController?.status == AnimationStatus.dismissed) {
+      return;
+    }
+
+    _showAddTaskHint = false;
+    _addTaskHintController?.reverse();
+  }
+
+  Widget _buildAddTaskHint() {
+    final hintAnimation = _addTaskHintController;
+
+    return SizedBox(
+      height: 36,
+      child: IgnorePointer(
+        ignoring: true,
+        child: hintAnimation == null
+            ? Opacity(
+                opacity: _showAddTaskHint ? 1 : 0,
+                child: _buildAddTaskHintPill(),
+              )
+            : FadeTransition(
+                opacity: CurvedAnimation(
+                  parent: hintAnimation,
+                  curve: Curves.easeOutCubic,
+                ),
+                child: _buildAddTaskHintPill(),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildAddTaskHintPill() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFF1E8D8)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: const Text(
+        'Tap to add a task',
+        style: TextStyle(
+          color: _hintTextColor,
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+
   Widget _buildFab(BuildContext context) {
     return GestureDetector(
       onTap: () {
+        _hideAddTaskHint();
         Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const AddTaskScreen()));
@@ -863,7 +730,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: accentColor.withOpacity(0.3),
+              color: accentColor.withValues(alpha: 0.3),
               blurRadius: 25,
               offset: const Offset(0, 12),
             ),
@@ -877,7 +744,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 }
 
-enum _FlowItemType { hourGap, minuteGap, event }
+enum _FlowItemType { hourGap, event }
 
 class _FlowItem {
   final _FlowItemType type;
@@ -909,20 +776,6 @@ class _FlowItem {
       leftLabel: label,
       leftTopPadding: 8,
       lineTopPadding: _CalendarScreenState._lineTopOffset,
-      alignment: Alignment.topCenter,
-      eventTopPadding: 0,
-      eventBottomPadding: 0,
-      event: null,
-    );
-  }
-
-  factory _FlowItem.minuteGap({String? label, required double height}) {
-    return _FlowItem._(
-      type: _FlowItemType.minuteGap,
-      height: height,
-      leftLabel: label,
-      leftTopPadding: 0,
-      lineTopPadding: 0,
       alignment: Alignment.topCenter,
       eventTopPadding: 0,
       eventBottomPadding: 0,
