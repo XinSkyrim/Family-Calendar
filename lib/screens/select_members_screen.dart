@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../themes/app_theme.dart';
+import '../widgets/avatar_image.dart';
 import 'family_screen.dart';
 
 class FamilyMember {
@@ -352,18 +353,7 @@ class _SelectMembersScreenState extends State<SelectMembersScreen> {
                 CircleAvatar(
                   radius: 22,
                   backgroundColor: const Color(0xFFF4DFC0),
-                  backgroundImage: member.imageUrl.isNotEmpty
-                      ? NetworkImage(member.imageUrl)
-                      : null,
-                  child: member.imageUrl.isEmpty
-                      ? Text(
-                          _memberInitials(member.name),
-                          style: const TextStyle(
-                            color: Color(0xFF8A6D2F),
-                            fontWeight: FontWeight.w800,
-                          ),
-                        )
-                      : null,
+                  backgroundImage: avatarImageProvider(member.imageUrl),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -503,14 +493,5 @@ class _SelectMembersScreenState extends State<SelectMembersScreen> {
         ),
       ),
     );
-  }
-
-  String _memberInitials(String name) {
-    final parts = name
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((part) => part.isNotEmpty);
-    final initials = parts.take(2).map((part) => part[0]).join();
-    return initials.isEmpty ? '?' : initials.toUpperCase();
   }
 }

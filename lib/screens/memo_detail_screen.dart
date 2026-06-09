@@ -6,9 +6,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
 
-import '../services/realtime_memo_transcription_service.dart';
 import '../themes/app_theme.dart';
 import 'add_task_screen.dart';
 
@@ -30,21 +28,13 @@ class MemoDetailScreen extends StatefulWidget {
   State<MemoDetailScreen> createState() => _MemoDetailScreenState();
 }
 
-class _MemoDetailScreenState extends State<MemoDetailScreen>
-    with SingleTickerProviderStateMixin {
+class _MemoDetailScreenState extends State<MemoDetailScreen> {
   static const int _maxTitleLength = 30;
   static const int _generatedTitleLength = 20;
   static const _background = AppTheme.pageBackground;
   static const _primaryColor = Color(0xFF0F172A);
-  static const _accentColor = Color(0xFFFAC638);
   static const _cardBorder = Color.fromRGBO(250, 198, 56, 0.05);
   static const _bodyText = Color(0xFF334155);
-  static const _titleStyle = TextStyle(
-    fontSize: 20,
-    fontWeight: FontWeight.w800,
-    color: _primaryColor,
-    height: 1.4,
-  );
   static const _bodyStyle = TextStyle(
     fontSize: 16,
     fontWeight: FontWeight.w400,
@@ -52,17 +42,16 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
     height: 1.6,
   );
   static const double _minDetailBodyHeight = 112;
-  static const double _maxDetailBodyHeight = 440;
+  static const double _maxDetailBodyHeight = 560;
+  static const double _bottomActionButtonHeight = 44;
+  static const double _bottomActionBottomOffset = 20;
+  static const double _bottomActionTopGap = 18;
 
   late final TextEditingController _titleController;
   late final TextEditingController _bodyController;
   late final FocusNode _titleFocusNode;
   late final FocusNode _bodyFocusNode;
   late final ScrollController _bodyScrollController;
-  final stt.SpeechToText _speech = stt.SpeechToText();
-  final RealtimeMemoTranscriptionService _realtimeTranscription =
-      RealtimeMemoTranscriptionService();
-  late final AnimationController _voiceBarsController;
 
   late String _originalTitle;
   late String _originalBody;
@@ -71,12 +60,7 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
   Timer? _autosaveTimer;
   bool _isSaving = false;
   bool _isAnalyzingTask = false;
-  bool _speechReady = false;
-  bool _isListening = false;
-  bool _isVoiceTransitioning = false;
-  double _soundLevel = 0;
-  String _listeningTarget = 'body';
-  int _voiceSessionId = 0;
+  bool _isDeleting = false;
 
   bool get _hasChanges {
     return _titleController.text.trim() != _originalTitle.trim() ||
@@ -97,11 +81,6 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
     _titleFocusNode = FocusNode()..addListener(_handleFocusChange);
     _bodyFocusNode = FocusNode()..addListener(_handleFocusChange);
     _bodyScrollController = ScrollController();
-    _voiceBarsController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    );
-    _initSpeech();
   }
 
   void _handleFieldChanged() {
@@ -123,62 +102,13 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
   }
 
   void _handleFocusChange() {
-    if (!mounted || _isListening || _isVoiceTransitioning) {
+    if (!mounted) {
       return;
     }
 
     if (_bodyFocusNode.hasFocus) {
       _scheduleBodyScrollToLatest();
     }
-  }
-
-  Future<void> _initSpeech() async {
-    try {
-      final ready = await _speech.initialize(
-        onStatus: _handleSpeechStatus,
-        onError: _handleSpeechError,
-      );
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _speechReady = ready;
-      });
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _speechReady = false;
-      });
-    }
-  }
-
-  bool get _isSpeechActive {
-    return _isListening ||
-        _speech.isListening ||
-        _realtimeTranscription.isActive;
-  }
-
-  Future<bool> _ensureSpeechReady() async {
-    if (_speechReady) {
-      return true;
-    }
-
-    await _initSpeech();
-    return _speechReady;
-  }
-
-  void _resetVoiceUiState() {
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _isListening = false;
-      _soundLevel = 0;
-    });
-    _stopVoiceBars();
   }
 
   void _scheduleBodyScrollToLatest({bool force = false}) {
@@ -192,7 +122,7 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
           !selection.isValid ||
           selection.extentOffset >= _bodyController.text.length - 1;
 
-      if (!force && !_isListening && !_bodyFocusNode.hasFocus) {
+      if (!force && !_bodyFocusNode.hasFocus) {
         return;
       }
 
@@ -204,28 +134,6 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
         _bodyScrollController.position.maxScrollExtent,
       );
     });
-  }
-
-  Future<void> _stopVoiceInputForNavigation() async {
-    _voiceSessionId++;
-
-    try {
-      await _realtimeTranscription.cancel();
-      await _speech.cancel();
-    } catch (_) {
-      // Keep the page responsive even if the plugin cannot cancel cleanly.
-    }
-
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _isListening = false;
-      _isVoiceTransitioning = false;
-      _soundLevel = 0;
-    });
-    _stopVoiceBars();
   }
 
   Future<_SavedMemo?> _saveMemo({
@@ -395,7 +303,6 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
 
   Future<void> _handleBackNavigation() async {
     _dismissKeyboard();
-    await _stopVoiceInputForNavigation();
     await _flushAutosave();
     if (!mounted) {
       return;
@@ -428,7 +335,7 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
   }
 
   Future<void> _analyzeMemoAndOpenTask() async {
-    if (_isSaving || _isAnalyzingTask) {
+    if (_isSaving || _isAnalyzingTask || _isDeleting) {
       return;
     }
 
@@ -462,18 +369,22 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
     });
 
     try {
-      await _stopVoiceInputForNavigation();
+      final callable =
+          FirebaseFunctions.instanceFor(
+            region: 'australia-southeast1',
+          ).httpsCallable(
+            'analyzeMemoToTask',
+            options: HttpsCallableOptions(timeout: const Duration(seconds: 15)),
+          );
 
-      final callable = FirebaseFunctions.instanceFor(
-        region: 'australia-southeast1',
-      ).httpsCallable('analyzeMemoToTask');
-
-      final result = await callable.call(<String, dynamic>{
-        'title': memoTitle,
-        'body': memoBody,
-        'timezone': DateTime.now().timeZoneName,
-        'currentDateISO': _currentDateISO(),
-      });
+      final result = await callable
+          .call(<String, dynamic>{
+            'title': memoTitle,
+            'body': memoBody,
+            'timezone': DateTime.now().timeZoneName,
+            'currentDateISO': _currentDateISO(),
+          })
+          .timeout(const Duration(seconds: 15));
 
       final data = Map<String, dynamic>.from(result.data as Map);
       final draft = _MemoTaskDraft.fromMap(data);
@@ -494,9 +405,17 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
         ),
       );
     } on FirebaseFunctionsException catch (error) {
-      _showMessage(_mapFunctionError(error));
-    } catch (_) {
-      _showMessage('Failed to analyze memo. Please try again.');
+      debugPrint(
+        'analyzeMemoToTask failed: code=${error.code}, '
+        'message=${error.message}, details=${error.details}',
+      );
+      await _openManualTaskFallback(memoTitle: memoTitle, memoBody: memoBody);
+    } on TimeoutException catch (error) {
+      debugPrint('analyzeMemoToTask timed out: $error');
+      await _openManualTaskFallback(memoTitle: memoTitle, memoBody: memoBody);
+    } catch (error) {
+      debugPrint('analyzeMemoToTask unexpected error: $error');
+      await _openManualTaskFallback(memoTitle: memoTitle, memoBody: memoBody);
     } finally {
       if (mounted) {
         setState(() {
@@ -506,17 +425,26 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
     }
   }
 
-  String _mapFunctionError(FirebaseFunctionsException error) {
-    switch (error.code) {
-      case 'unauthenticated':
-        return 'Please sign in to continue.';
-      case 'invalid-argument':
-        return 'This memo does not have enough content to analyze.';
-      case 'resource-exhausted':
-        return 'Too many requests. Please wait a few seconds.';
-      default:
-        return error.message ?? 'AI analysis failed. Please try again.';
+  Future<void> _openManualTaskFallback({
+    required String memoTitle,
+    required String memoBody,
+  }) async {
+    if (!mounted) {
+      return;
     }
+
+    _showMessage(
+      'No task details were detected. You can fill them in manually.',
+    );
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AddTaskScreen(
+          initialTitle: memoTitle.isNotEmpty ? memoTitle : null,
+          initialNotes: memoBody.isNotEmpty ? memoBody : null,
+        ),
+      ),
+    );
   }
 
   String _currentDateISO() {
@@ -527,286 +455,207 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
     return '$year-$month-$day';
   }
 
-  Future<void> _toggleListening() async {
-    if (_isSaving || _isAnalyzingTask || _isVoiceTransitioning) {
+  Future<void> _confirmAndDeleteMemo() async {
+    if (_isDeleting || _isSaving || _isAnalyzingTask) {
       return;
     }
 
-    if (_isSpeechActive) {
-      await _stopListening();
+    if (_isCreatingMode || _currentMemoId.isEmpty) {
+      Navigator.of(context).pop();
       return;
     }
 
-    if (!mounted) {
+    final confirmed = await _showDeleteMemoDialog();
+    if (!mounted || !confirmed) {
       return;
     }
 
-    final target = _titleFocusNode.hasFocus ? 'title' : 'body';
-
-    _titleFocusNode.unfocus();
-    _bodyFocusNode.unfocus();
-    FocusScope.of(context).unfocus();
-
-    final listeningTarget = target;
-    final controller = listeningTarget == 'title'
-        ? _titleController
-        : _bodyController;
-    var voiceBaseText = controller.text;
-
-    if (voiceBaseText.isNotEmpty &&
-        !voiceBaseText.endsWith(' ') &&
-        !voiceBaseText.endsWith('\n')) {
-      voiceBaseText = '$voiceBaseText ';
-    }
+    _dismissKeyboard();
+    _autosaveTimer?.cancel();
 
     setState(() {
-      _isVoiceTransitioning = true;
-      _listeningTarget = listeningTarget;
-      _soundLevel = 0;
+      _isDeleting = true;
     });
-    _startVoiceBars();
-
-    final sessionId = ++_voiceSessionId;
 
     try {
-      await _startRealtimeListening(
-        sessionId: sessionId,
-        controller: controller,
-        voiceBaseText: voiceBaseText,
-      );
-    } catch (_) {
-      await _realtimeTranscription.cancel();
-      if (!mounted || sessionId != _voiceSessionId) {
+      await FirebaseFirestore.instance
+          .collection('memos')
+          .doc(_currentMemoId)
+          .delete();
+
+      if (!mounted) {
         return;
       }
 
-      try {
-        await _startDeviceSpeechFallback(
-          sessionId: sessionId,
-          controller: controller,
-          voiceBaseText: voiceBaseText,
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Note deleted.'),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
-      } catch (_) {
-        _voiceSessionId++;
-        _resetVoiceUiState();
-        _showMessage('Unable to start voice input. Please try again.');
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isVoiceTransitioning = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _startRealtimeListening({
-    required int sessionId,
-    required TextEditingController controller,
-    required String voiceBaseText,
-  }) async {
-    await _realtimeTranscription.start(
-      onTranscriptChanged: (transcript) {
-        if (!mounted || sessionId != _voiceSessionId) {
-          return;
-        }
-
-        _applyVoiceTranscript(controller, voiceBaseText, transcript);
-      },
-      onSoundLevelChanged: (level) {
-        if (!mounted || sessionId != _voiceSessionId) {
-          return;
-        }
-
-        setState(() {
-          _soundLevel = level;
-        });
-      },
-      onSessionEnded: () {
-        if (!mounted || sessionId != _voiceSessionId || _isVoiceTransitioning) {
-          return;
-        }
-
-        setState(() {
-          _isListening = false;
-          _soundLevel = 0;
-        });
-        _stopVoiceBars();
-      },
-    );
-
-    if (!mounted || sessionId != _voiceSessionId) {
-      return;
-    }
-
-    setState(() {
-      _isListening = true;
-      _soundLevel = 0;
-    });
-  }
-
-  Future<void> _startDeviceSpeechFallback({
-    required int sessionId,
-    required TextEditingController controller,
-    required String voiceBaseText,
-  }) async {
-    final ready = await _ensureSpeechReady();
-    if (!ready) {
-      throw const RealtimeTranscriptionException(
-        'Device speech input is unavailable.',
-      );
-    }
-
-    await _speech.listen(
-      listenFor: const Duration(minutes: 5),
-      pauseFor: const Duration(seconds: 8),
-      listenOptions: stt.SpeechListenOptions(
-        listenMode: stt.ListenMode.dictation,
-        partialResults: true,
-      ),
-      onSoundLevelChange: (level) {
-        if (!mounted || sessionId != _voiceSessionId) {
-          return;
-        }
-        setState(() {
-          _soundLevel = level;
-        });
-      },
-      onResult: (result) {
-        if (!mounted || sessionId != _voiceSessionId) {
-          return;
-        }
-
-        _applyVoiceTranscript(
-          controller,
-          voiceBaseText,
-          result.recognizedWords,
-        );
-      },
-    );
-
-    if (!mounted || sessionId != _voiceSessionId) {
-      return;
-    }
-
-    setState(() {
-      _isListening = true;
-      _soundLevel = 0;
-    });
-  }
-
-  void _applyVoiceTranscript(
-    TextEditingController controller,
-    String voiceBaseText,
-    String transcript,
-  ) {
-    final cleanedTranscript = transcript.trim();
-    final nextText = cleanedTranscript.isEmpty
-        ? voiceBaseText.trimRight()
-        : '$voiceBaseText$cleanedTranscript';
-
-    controller.value = TextEditingValue(
-      text: nextText,
-      selection: TextSelection.collapsed(offset: nextText.length),
-    );
-  }
-
-  Future<void> _stopListening() async {
-    if (_isVoiceTransitioning) {
-      return;
-    }
-
-    setState(() {
-      _isVoiceTransitioning = true;
-    });
-
-    try {
-      if (_realtimeTranscription.isActive) {
-        await _realtimeTranscription.stop();
-      } else if (_speech.isListening || _isListening) {
-        await _speech.stop();
-      }
+      Navigator.of(context).pop();
     } catch (_) {
-      // Even if the platform stop fails, keep local state recoverable.
-    } finally {
-      _voiceSessionId++;
-      _resetVoiceUiState();
-      if (mounted) {
-        setState(() {
-          _isVoiceTransitioning = false;
-        });
+      if (!mounted) {
+        return;
       }
-    }
-  }
 
-  void _handleSpeechStatus(String status) {
-    if (!mounted) {
-      return;
-    }
-
-    if (status == stt.SpeechToText.listeningStatus) {
+      _showMessage('Failed to delete note. Please try again.');
       setState(() {
-        _isListening = true;
+        _isDeleting = false;
       });
-      _startVoiceBars();
-      return;
-    }
-
-    if (status == stt.SpeechToText.doneStatus) {
-      _voiceSessionId++;
-    }
-
-    if (status == stt.SpeechToText.doneStatus ||
-        status == stt.SpeechToText.notListeningStatus) {
-      setState(() {
-        _isListening = false;
-        _soundLevel = 0;
-      });
-      _stopVoiceBars();
     }
   }
 
-  void _handleSpeechError(dynamic error) {
-    if (!mounted) {
-      return;
-    }
+  Future<bool> _showDeleteMemoDialog() async {
+    final title = _titleController.text.trim().isEmpty
+        ? _fallbackTitle(_bodyController.text)
+        : _titleController.text.trim();
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 22,
+            vertical: 24,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          elevation: 10,
+          backgroundColor: Colors.white,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: _cardBorder),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFAC638).withValues(alpha: 0.08),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 45,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: AppTheme.lightBackground,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Center(
+                  child: Container(
+                    width: 58,
+                    height: 58,
+                    decoration: BoxDecoration(
+                      color: AppTheme.error.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    child: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: AppTheme.error,
+                      size: 31,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Delete this note?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                    color: _primaryColor,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'This will permanently remove "$title".',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.mutedText,
+                    height: 1.6,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                GestureDetector(
+                  onTap: () => Navigator.of(dialogContext).pop(true),
+                  child: Container(
+                    width: double.infinity,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: AppTheme.error,
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.error.withValues(alpha: 0.18),
+                          blurRadius: 15,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'Delete',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: AppTheme.lightBackground),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      backgroundColor: AppTheme.lightBackground,
+                      foregroundColor: _primaryColor,
+                    ),
+                    onPressed: () => Navigator.of(dialogContext).pop(false),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
 
-    _voiceSessionId++;
-    _resetVoiceUiState();
-
-    final errorMessage = '${error?.errorMsg ?? error}'.toLowerCase();
-    final isPermissionError =
-        errorMessage.contains('permission') ||
-        errorMessage.contains('recognizer_disabled');
-
-    if (isPermissionError) {
-      _showMessage(
-        'Microphone or speech permission is unavailable. Please check system settings.',
-      );
-      return;
-    }
-
-    if (error?.permanent != true) {
-      _showMessage('Voice input stopped. Please try again.');
-    }
-  }
-
-  void _startVoiceBars() {
-    if (!_voiceBarsController.isAnimating) {
-      _voiceBarsController.repeat();
-    }
-  }
-
-  void _stopVoiceBars() {
-    _voiceBarsController.stop();
+    return result ?? false;
   }
 
   @override
   void dispose() {
     _autosaveTimer?.cancel();
-    _voiceBarsController.dispose();
-    unawaited(_realtimeTranscription.dispose());
-    _speech.cancel();
     _titleFocusNode
       ..removeListener(_handleFocusChange)
       ..dispose();
@@ -904,19 +753,12 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
         children: [
           AppTheme.backButton(context, onPressed: _handleBackNavigation),
           Expanded(
-            child: Center(
-              child: Text(
-                _isCreatingMode ? 'New Note' : 'Note Detail',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: _primaryColor,
-                  letterSpacing: -0.45,
-                ),
-              ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: _buildAppBarTitle(),
             ),
           ),
-          _buildAddTaskAction(),
+          _buildDeleteAction(),
         ],
       ),
     );
@@ -975,6 +817,34 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
     );
   }
 
+  Widget _buildAppBarTitle() {
+    return TextField(
+      controller: _titleController,
+      focusNode: _titleFocusNode,
+      maxLines: 1,
+      maxLength: _maxTitleLength,
+      inputFormatters: [LengthLimitingTextInputFormatter(_maxTitleLength)],
+      textAlign: TextAlign.center,
+      textInputAction: TextInputAction.done,
+      scrollPhysics: const BouncingScrollPhysics(),
+      onSubmitted: (_) => unawaited(_flushAutosave()),
+      onTapOutside: (_) => _dismissKeyboard(),
+      contextMenuBuilder: _filteredTextFieldContextMenu,
+      decoration: InputDecoration(
+        hintText: _isCreatingMode ? 'New Note' : 'Note title',
+        border: InputBorder.none,
+        isCollapsed: true,
+        contentPadding: EdgeInsets.zero,
+        counterText: '',
+      ),
+      style: const TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.w800,
+        color: _primaryColor,
+      ),
+    );
+  }
+
   _DetailViewportConfig _detailViewportConfig({
     required double availableHeight,
     required double keyboardInset,
@@ -983,46 +853,16 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
       _bottomActionsReservedHeight(),
       keyboardInset + 32,
     );
-    final calculatedHeight = availableHeight - scrollBottomPadding - 132;
-
     return _DetailViewportConfig(
-      maxBodyHeight: calculatedHeight
-          .clamp(_minDetailBodyHeight, _maxDetailBodyHeight)
-          .toDouble(),
+      maxBodyHeight: _maxDetailBodyHeight,
       scrollBottomPadding: scrollBottomPadding,
     );
   }
 
   double _bottomActionsReservedHeight() {
-    return (_isListening || _isVoiceTransitioning) ? 208 : 132;
-  }
-
-  double _resolveDetailBodyHeight(
-    BuildContext context, {
-    required String text,
-    required String placeholder,
-    required double maxBodyHeight,
-    required double contentWidth,
-  }) {
-    final usableWidth = math.max(0.0, contentWidth - 6);
-    if (usableWidth == 0) {
-      return _minDetailBodyHeight;
-    }
-
-    final sampleText = text.isEmpty ? placeholder : text;
-    final normalizedText = sampleText.endsWith('\n')
-        ? '$sampleText '
-        : sampleText;
-    final painter = TextPainter(
-      text: TextSpan(text: normalizedText, style: _bodyStyle),
-      textDirection: Directionality.of(context),
-      textScaler: MediaQuery.textScalerOf(context),
-      maxLines: null,
-    )..layout(maxWidth: usableWidth);
-
-    return (painter.height + 14)
-        .clamp(_minDetailBodyHeight, maxBodyHeight)
-        .toDouble();
+    return _bottomActionButtonHeight +
+        _bottomActionBottomOffset +
+        _bottomActionTopGap;
   }
 
   Widget _buildEditableBody(
@@ -1030,104 +870,92 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
     required double maxBodyHeight,
     required double contentWidth,
   }) {
-    final bodyHeight = _resolveDetailBodyHeight(
-      context,
-      text: _bodyController.text,
-      placeholder: 'Write your memo here...',
-      maxBodyHeight: maxBodyHeight,
-      contentWidth: contentWidth,
+    final bodyHeight = maxBodyHeight.clamp(
+      _minDetailBodyHeight,
+      _maxDetailBodyHeight,
     );
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextField(
-          controller: _titleController,
-          focusNode: _titleFocusNode,
-          maxLines: 2,
-          maxLength: _maxTitleLength,
-          inputFormatters: [LengthLimitingTextInputFormatter(_maxTitleLength)],
-          textInputAction: TextInputAction.next,
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      height: bodyHeight,
+      child: Scrollbar(
+        controller: _bodyScrollController,
+        thumbVisibility: true,
+        radius: const Radius.circular(999),
+        child: TextField(
+          controller: _bodyController,
+          focusNode: _bodyFocusNode,
+          scrollController: _bodyScrollController,
+          keyboardType: TextInputType.multiline,
+          textInputAction: TextInputAction.newline,
+          minLines: null,
+          maxLines: null,
+          expands: true,
+          textAlignVertical: TextAlignVertical.top,
           onTapOutside: (_) => _dismissKeyboard(),
-          decoration: InputDecoration(
-            hintText: 'Note title',
+          contextMenuBuilder: _filteredTextFieldContextMenu,
+          scrollPadding: EdgeInsets.only(
+            bottom: math.max(32, MediaQuery.viewInsetsOf(context).bottom + 16),
+          ),
+          decoration: const InputDecoration(
+            hintText: 'Write your note here...',
             border: InputBorder.none,
             isCollapsed: true,
-            counterText: '',
           ),
-          style: _titleStyle,
+          style: _bodyStyle,
         ),
-        const SizedBox(height: 16),
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
-          height: bodyHeight,
-          child: Scrollbar(
-            controller: _bodyScrollController,
-            thumbVisibility: true,
-            radius: const Radius.circular(999),
-            child: TextField(
-              controller: _bodyController,
-              focusNode: _bodyFocusNode,
-              scrollController: _bodyScrollController,
-              keyboardType: TextInputType.multiline,
-              textInputAction: TextInputAction.newline,
-              minLines: null,
-              maxLines: null,
-              expands: true,
-              textAlignVertical: TextAlignVertical.top,
-              onTapOutside: (_) => _dismissKeyboard(),
-              scrollPadding: EdgeInsets.only(
-                bottom: math.max(
-                  32,
-                  MediaQuery.viewInsetsOf(context).bottom + 16,
-                ),
-              ),
-              decoration: const InputDecoration(
-                hintText: 'Write your note here...',
-                border: InputBorder.none,
-                isCollapsed: true,
-              ),
-              style: _bodyStyle,
-            ),
-          ),
-        ),
-      ],
+      ),
+    );
+  }
+
+  Widget _filteredTextFieldContextMenu(
+    BuildContext context,
+    EditableTextState editableTextState,
+  ) {
+    final buttonItems = editableTextState.contextMenuButtonItems
+        .where((item) {
+          final label = item.label?.toLowerCase().trim() ?? '';
+          return !label.contains('read aloud') && !label.contains('share');
+        })
+        .toList(growable: false);
+
+    return AdaptiveTextSelectionToolbar.buttonItems(
+      anchors: editableTextState.contextMenuAnchors,
+      buttonItems: buttonItems,
     );
   }
 
   Widget _buildBottomActions(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (_isListening || _isVoiceTransitioning) ...[
-          _buildListeningBanner(),
-          const SizedBox(height: 12),
-        ],
-        _buildVoiceInputButton(),
-      ],
+    return Align(
+      alignment: Alignment.centerRight,
+      child: _AddToCalendarButton(
+        isConverting: _isAnalyzingTask,
+        isDisabled: _isSaving || _isDeleting,
+        onTap: _analyzeMemoAndOpenTask,
+      ),
     );
   }
 
-  Widget _buildAddTaskAction() {
-    final isDisabled = _isAnalyzingTask || _isSaving;
+  Widget _buildDeleteAction() {
+    final isDisabled = _isDeleting || _isSaving || _isAnalyzingTask;
 
     return Opacity(
       opacity: isDisabled ? 0.72 : 1,
       child: InkWell(
         borderRadius: BorderRadius.circular(999),
-        onTap: isDisabled ? null : _analyzeMemoAndOpenTask,
+        onTap: isDisabled ? null : _confirmAndDeleteMemo,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           width: 42,
           height: 42,
           decoration: BoxDecoration(
-            color: _accentColor.withValues(alpha: 0.14),
+            color: AppTheme.error.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: const Color(0xFFFFE3A3)),
+            border: Border.all(color: AppTheme.error.withValues(alpha: 0.12)),
             boxShadow: [
               BoxShadow(
-                color: _accentColor.withValues(alpha: 0.1),
+                color: AppTheme.error.withValues(alpha: 0.12),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
@@ -1140,146 +968,16 @@ class _MemoDetailScreenState extends State<MemoDetailScreen>
                     height: 16,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: _accentColor,
+                      color: AppTheme.error,
                     ),
                   )
                 : const Icon(
-                    Icons.auto_awesome_rounded,
-                    color: Color(0xFF9A6B00),
+                    Icons.delete_outline_rounded,
+                    color: AppTheme.error,
                     size: 20,
                   ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildVoiceInputButton() {
-    const targetLabel = 'Content';
-    final isVoiceButtonDisabled =
-        _isSaving || _isAnalyzingTask || _isVoiceTransitioning;
-    final statusLabel = _isVoiceTransitioning
-        ? (_isSpeechActive
-              ? 'Stopping voice for $targetLabel'
-              : 'Preparing voice for $targetLabel')
-        : (_isListening
-              ? 'Listening for $targetLabel'
-              : 'Voice input for $targetLabel');
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          statusLabel,
-          style: const TextStyle(
-            color: Color(0xFF64748B),
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 8),
-        IgnorePointer(
-          ignoring: isVoiceButtonDisabled,
-          child: Opacity(
-            opacity: isVoiceButtonDisabled ? 0.72 : 1,
-            child: GestureDetector(
-              onTap: _toggleListening,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                width: 68,
-                height: 68,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: _isListening
-                        ? const [Color(0xFFF59E0B), Color(0xFFEA580C)]
-                        : const [Color(0xFFFFF6D8), Color(0xFFF7E6A8)],
-                  ),
-                  border: Border.all(
-                    color: _isListening
-                        ? const Color(0xFFF59E0B)
-                        : const Color(0x33FAC638),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color:
-                          (_isListening
-                                  ? const Color(0xFFF59E0B)
-                                  : const Color(0xFFFAC638))
-                              .withValues(alpha: 0.24),
-                      blurRadius: 18,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: Center(
-                  child: _isVoiceTransitioning
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.4,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              _primaryColor,
-                            ),
-                          ),
-                        )
-                      : Icon(
-                          _isListening ? Icons.mic : Icons.mic_none_rounded,
-                          color: _isListening ? Colors.white : _accentColor,
-                          size: 30,
-                        ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildListeningBanner() {
-    final targetLabel = _listeningTarget == 'title' ? 'Title' : 'Content';
-    final statusLabel = _isVoiceTransitioning && !_isListening
-        ? 'Preparing voice for $targetLabel'
-        : 'Listening to $targetLabel';
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0x22F59E0B)),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFFF59E0B).withValues(alpha: 0.08),
-            blurRadius: 18,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _VoiceBars(
-              animation: _voiceBarsController,
-              level: _soundLevel,
-              color: _accentColor,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Text(
-            statusLabel,
-            style: const TextStyle(
-              color: Color(0xFF334155),
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -1307,44 +1005,86 @@ class _DetailViewportConfig {
   final double scrollBottomPadding;
 }
 
-class _VoiceBars extends StatelessWidget {
-  const _VoiceBars({
-    required this.animation,
-    required this.level,
-    required this.color,
+class _AddToCalendarButton extends StatelessWidget {
+  const _AddToCalendarButton({
+    required this.isConverting,
+    required this.isDisabled,
+    required this.onTap,
   });
 
-  final Animation<double> animation;
-  final double level;
-  final Color color;
+  final bool isConverting;
+  final bool isDisabled;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: animation,
-      builder: (context, child) {
-        final normalizedLevel = level.isFinite
-            ? ((level + 2) / 12).clamp(0.15, 1.0)
-            : 0.2;
-
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: List.generate(10, (index) {
-            final phase = animation.value * math.pi * 2 + index * 0.55;
-            final height = 10 + math.sin(phase).abs() * 20 * normalizedLevel;
-
-            return Container(
-              width: 5,
-              height: height,
-              margin: const EdgeInsets.symmetric(horizontal: 2),
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(999),
+    return Opacity(
+      opacity: isDisabled ? 0.72 : 1,
+      child: GestureDetector(
+        onTap: isDisabled || isConverting ? null : onTap,
+        child: Container(
+          height: 56,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: [AppTheme.accent, AppTheme.accentDark],
+            ),
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.accent.withValues(alpha: 0.2),
+                blurRadius: 15,
+                offset: const Offset(0, 4),
               ),
-            );
-          }),
-        );
-      },
+            ],
+          ),
+          child: Center(
+            child: isConverting
+                ? const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      SizedBox(width: 10),
+                      Text(
+                        'Converting...',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ],
+                  )
+                : const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.calendar_month_rounded,
+                        color: Colors.black87,
+                        size: 20,
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        'Add to Calendar',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      ),
     );
   }
 }

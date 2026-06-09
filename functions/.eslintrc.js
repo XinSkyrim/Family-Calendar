@@ -29,6 +29,7 @@ module.exports = {
     "quotes": ["error", "double"],
     "import/no-unresolved": 0,
     "max-len": ["error", { "code": 120 }],
+    "linebreak-style": "off",
     "object-curly-spacing": "off",
     "spaced-comment": "off",
     "indent": "off",

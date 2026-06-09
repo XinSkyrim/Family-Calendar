@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../navigation/app_bottom_nav.dart';
 import '../themes/app_theme.dart';
 import '../widgets/app_today_top_bar.dart';
+import '../widgets/avatar_image.dart';
 import '../widgets/bottom_navigation_bar.dart';
 import 'create_family_dialog.dart';
 import 'family_screen.dart';
@@ -437,7 +438,7 @@ class _SelectFamilyScreenState extends State<SelectFamilyScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: const [
-                Icon(Icons.add, color: Colors.black87, size: 18),
+                Icon(Icons.group_add_rounded, color: Colors.black87, size: 20),
                 SizedBox(width: 8),
                 Text(
                   'Create New Group',
@@ -560,11 +561,9 @@ class _FamilyGroupCard extends StatelessWidget {
             border: Border.all(color: Colors.white, width: 2),
           ),
           child: ClipOval(
-            child: Image.network(
-              avatars[i],
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) =>
-                  Container(color: Colors.grey.shade300),
+            child: AvatarImage(
+              imageUrl: avatars[i],
+              placeholderColor: Colors.grey.shade300,
             ),
           ),
         ),

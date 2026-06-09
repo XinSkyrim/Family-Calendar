@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -263,16 +264,22 @@ class _VoiceMemoScreenState extends State<VoiceMemoScreen>
     });
 
     try {
-      final callable = FirebaseFunctions.instanceFor(
-        region: 'australia-southeast1',
-      ).httpsCallable('summarizeVoiceMemo');
+      final callable =
+          FirebaseFunctions.instanceFor(
+            region: 'australia-southeast1',
+          ).httpsCallable(
+            'summarizeVoiceMemo',
+            options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
+          );
 
-      final result = await callable.call(<String, dynamic>{
-        'input': rawInput,
-        'inputMode': _activeInputMode,
-        'timezone': DateTime.now().timeZoneName,
-        'currentDateISO': _currentDateISO(),
-      });
+      final result = await callable
+          .call(<String, dynamic>{
+            'input': rawInput,
+            'inputMode': _activeInputMode,
+            'timezone': DateTime.now().timeZoneName,
+            'currentDateISO': _currentDateISO(),
+          })
+          .timeout(const Duration(seconds: 30));
 
       final summary = VoiceMemoSummary.fromMap(
         Map<String, dynamic>.from(result.data as Map),
@@ -294,6 +301,8 @@ class _VoiceMemoScreenState extends State<VoiceMemoScreen>
       _showMessage('Voice note summarized and saved.');
     } on FirebaseFunctionsException catch (error) {
       _showMessage(_mapFunctionError(error));
+    } on TimeoutException {
+      _showMessage('AI summary timed out. Please try again.');
     } catch (_) {
       _showMessage('Failed to save note. Please try again.');
     } finally {

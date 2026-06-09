@@ -3,9 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
-import 'calendar_screen.dart';
+import '../constants/default_avatar.dart';
 import 'login_screen.dart';
-import 'memo_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({Key? key}) : super(key: key);
@@ -24,8 +23,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   static const placeholderColor = Color(0xFF94A3B8);
   static const fieldBackgroundColor = Color(0xFFFFFDF5);
   static const fieldBorderColor = Color(0xFFDDE2E7);
-  static const String defaultAvatarUrl =
-      'https://firebasestorage.googleapis.com/v0/b/family-calendar-65220-au/o/default_avatars%2Fdefault.png?alt=media&token=ee994d79-50b2-4aa2-8916-0063a657c202';
+  static const String defaultAvatarUrl = DefaultAvatar.path;
 
   final fullNameController = TextEditingController();
   final emailController = TextEditingController();
@@ -122,7 +120,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
 
       await user.updateDisplayName(fullName);
-      await user.updatePhotoURL(defaultAvatarUrl);
 
       await user.sendEmailVerification();
 
@@ -231,9 +228,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             return SingleChildScrollView(
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: constraints.maxHeight,
-                ),
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
                 child: Align(
                   alignment: Alignment.topCenter,
                   child: Padding(
@@ -282,10 +277,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  Widget _buildRegisterCard({
-    bool compact = false,
-    bool veryCompact = false,
-  }) {
+  Widget _buildRegisterCard({bool compact = false, bool veryCompact = false}) {
     final horizontalPadding = veryCompact
         ? 20.0
         : compact

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../navigation/app_bottom_nav.dart';
 import '../themes/app_theme.dart';
 import '../widgets/app_header.dart';
+import '../widgets/avatar_image.dart';
 import '../widgets/bottom_navigation_bar.dart';
 import '../services/family_invitation_service.dart';
 
@@ -107,8 +108,8 @@ class _FamilyScreenState extends State<FamilyScreen> {
   }
 
   Future<QueryDocumentSnapshot<Map<String, dynamic>>?> _findUserDocByEmail(
-      String email,
-      ) async {
+    String email,
+  ) async {
     final firestore = FirebaseFirestore.instance;
     final normalizedEmail = email.trim().toLowerCase();
 
@@ -165,12 +166,12 @@ class _FamilyScreenState extends State<FamilyScreen> {
       final invitedUserData = invitedUserDoc.data();
 
       final nickname =
-      (invitedUserData['fullName'] ??
-          invitedUserData['name'] ??
-          invitedUserData['displayName'] ??
-          invitedUserData['nickname'] ??
-          inputEmail)
-          .toString();
+          (invitedUserData['fullName'] ??
+                  invitedUserData['name'] ??
+                  invitedUserData['displayName'] ??
+                  invitedUserData['nickname'] ??
+                  inputEmail)
+              .toString();
 
       final existingMemberDoc = await familyRef
           .collection('members')
@@ -202,9 +203,9 @@ class _FamilyScreenState extends State<FamilyScreen> {
       _inviteEmailController.clear();
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Invitation sent to $nickname')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Invitation sent to $nickname')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -555,9 +556,9 @@ class _FamilyScreenState extends State<FamilyScreen> {
       final memberData = doc.data();
 
       final String userId =
-      (memberData['uid'] ?? memberData['userId'] ?? doc.id)
-          .toString()
-          .trim();
+          (memberData['uid'] ?? memberData['userId'] ?? doc.id)
+              .toString()
+              .trim();
 
       if (userId.isEmpty) {
         continue;
@@ -568,26 +569,26 @@ class _FamilyScreenState extends State<FamilyScreen> {
       final String role = (memberData['role'] ?? 'member').toString().trim();
 
       final String fullName =
-      (userData?['fullName'] ??
-          userData?['name'] ??
-          userData?['displayName'] ??
-          memberData['nickname'] ??
-          memberData['fullName'] ??
-          memberData['name'] ??
-          memberData['displayName'] ??
-          'Unknown Member')
-          .toString();
+          (userData?['fullName'] ??
+                  userData?['name'] ??
+                  userData?['displayName'] ??
+                  memberData['nickname'] ??
+                  memberData['fullName'] ??
+                  memberData['name'] ??
+                  memberData['displayName'] ??
+                  'Unknown Member')
+              .toString();
 
       final String photoURL =
-      (userData?['photoURL'] ??
-          userData?['photoUrl'] ??
-          userData?['avatar'] ??
-          memberData['photoURL'] ??
-          memberData['photoUrl'] ??
-          memberData['avatar'] ??
-          '')
-          .toString()
-          .trim();
+          (userData?['photoURL'] ??
+                  userData?['photoUrl'] ??
+                  userData?['avatar'] ??
+                  memberData['photoURL'] ??
+                  memberData['photoUrl'] ??
+                  memberData['avatar'] ??
+                  '')
+              .toString()
+              .trim();
 
       members.add({
         'userId': userId,
@@ -731,8 +732,8 @@ class _FamilyScreenState extends State<FamilyScreen> {
                     onTap: _isInviting
                         ? null
                         : () {
-                      _inviteEmailController.clear();
-                    },
+                            _inviteEmailController.clear();
+                          },
                     child: const Icon(
                       Icons.clear,
                       size: 24,
@@ -988,34 +989,34 @@ class _FamilyScreenState extends State<FamilyScreen> {
                 ),
               )
             else if (members.isEmpty)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    border: Border.all(color: AppTheme.lightBackground),
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: const Text(
-                    'No group members found.',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.headline,
-                    ),
-                  ),
-                )
-              else
-                ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: members.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final member = members[index];
-                    return _buildFamilyMemberCard(member);
-                  },
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: AppTheme.lightBackground),
+                  borderRadius: BorderRadius.circular(24),
                 ),
+                child: const Text(
+                  'No group members found.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.headline,
+                  ),
+                ),
+              )
+            else
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: members.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final member = members[index];
+                  return _buildFamilyMemberCard(member);
+                },
+              ),
           ],
         );
       },
@@ -1052,25 +1053,7 @@ class _FamilyScreenState extends State<FamilyScreen> {
               ),
               color: AppTheme.lightBackground,
             ),
-            child: ClipOval(
-              child: photoURL.isNotEmpty
-                  ? Image.network(
-                photoURL,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) {
-                  return const Center(
-                    child: Icon(
-                      Icons.person,
-                      size: 32,
-                      color: Colors.grey,
-                    ),
-                  );
-                },
-              )
-                  : const Center(
-                child: Icon(Icons.person, size: 32, color: Colors.grey),
-              ),
-            ),
+            child: ClipOval(child: AvatarImage(imageUrl: photoURL)),
           ),
           const SizedBox(width: 16),
           Expanded(

@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../themes/app_theme.dart';
+import '../widgets/avatar_image.dart';
 import 'select_members_screen.dart';
 
 // Remote avatars (expires after ~7 days from Figma export)
@@ -47,7 +48,7 @@ class FamilySelectionResult {
 
 class FamilySelectionScreen extends StatefulWidget {
   const FamilySelectionScreen({Key? key, this.initialSelectedIds = const []})
-      : super(key: key);
+    : super(key: key);
 
   final List<String> initialSelectedIds;
 
@@ -128,8 +129,8 @@ class _FamilySelectionScreenState extends State<FamilySelectionScreen> {
   }
 
   Future<List<SelectedTaskMember>> _loadAllFamilyMembers(
-      String familyId,
-      ) async {
+    String familyId,
+  ) async {
     final snapshot = await FirebaseFirestore.instance
         .collection('families')
         .doc(familyId)
@@ -148,26 +149,26 @@ class _FamilySelectionScreenState extends State<FamilySelectionScreen> {
 
       final userData = await _findUserByUid(userId);
       final name =
-      (userData?['fullName'] ??
-          userData?['name'] ??
-          userData?['displayName'] ??
-          memberData['nickname'] ??
-          memberData['fullName'] ??
-          memberData['name'] ??
-          'Unknown Member')
-          .toString()
-          .trim();
+          (userData?['fullName'] ??
+                  userData?['name'] ??
+                  userData?['displayName'] ??
+                  memberData['nickname'] ??
+                  memberData['fullName'] ??
+                  memberData['name'] ??
+                  'Unknown Member')
+              .toString()
+              .trim();
 
       final avatarUrl =
-      (userData?['photoURL'] ??
-          userData?['photoUrl'] ??
-          userData?['avatar'] ??
-          memberData['photoURL'] ??
-          memberData['photoUrl'] ??
-          memberData['avatar'] ??
-          '')
-          .toString()
-          .trim();
+          (userData?['photoURL'] ??
+                  userData?['photoUrl'] ??
+                  userData?['avatar'] ??
+                  memberData['photoURL'] ??
+                  memberData['photoUrl'] ??
+                  memberData['avatar'] ??
+                  '')
+              .toString()
+              .trim();
 
       members.add(
         SelectedTaskMember(
@@ -271,10 +272,10 @@ class _FamilySelectionScreenState extends State<FamilySelectionScreen> {
         _FamilyGroup(
           id: familyId,
           name:
-          (familyData['familyName'] ??
-              membershipData['familyName'] ??
-              'Unnamed Family')
-              .toString(),
+              (familyData['familyName'] ??
+                      membershipData['familyName'] ??
+                      'Unnamed Family')
+                  .toString(),
           memberCount: memberCount,
           avatars: avatars,
           extraCount: extraCount,
@@ -454,7 +455,7 @@ class _FamilySelectionScreenState extends State<FamilySelectionScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Failed to load families\n${snapshot.error}',
+                  'Failed to load groups\n${snapshot.error}',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontSize: 14,
@@ -500,7 +501,7 @@ class _FamilySelectionScreenState extends State<FamilySelectionScreen> {
                 Icon(Icons.groups_outlined, size: 44, color: Colors.grey),
                 SizedBox(height: 12),
                 Text(
-                  'No family found',
+                  'No group found',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
@@ -509,7 +510,7 @@ class _FamilySelectionScreenState extends State<FamilySelectionScreen> {
                 ),
                 SizedBox(height: 8),
                 Text(
-                  'Create a new family or join one via invitation link',
+                  'Create a new group or join one via invitation link',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 14,
@@ -533,15 +534,15 @@ class _FamilySelectionScreenState extends State<FamilySelectionScreen> {
               children: groups
                   .map(
                     (group) => Padding(
-                  padding: const EdgeInsets.only(bottom: 24),
-                  child: _FamilyGroupCard(
-                    group: group,
-                    selected: _selectedFamilyIds.contains(group.id),
-                    onSelectAll: () => _handleSelectAll(group),
-                    onTap: () => _handleOpenFamily(group),
-                  ),
-                ),
-              )
+                      padding: const EdgeInsets.only(bottom: 24),
+                      child: _FamilyGroupCard(
+                        group: group,
+                        selected: _selectedFamilyIds.contains(group.id),
+                        onSelectAll: () => _handleSelectAll(group),
+                        onTap: () => _handleOpenFamily(group),
+                      ),
+                    ),
+                  )
                   .toList(growable: false),
             ),
           ),
@@ -663,7 +664,9 @@ class _FamilyGroupCard extends StatelessWidget {
                       backgroundColor: Colors.white,
                       child: CircleAvatar(
                         radius: 16,
-                        backgroundImage: NetworkImage(group.avatars[index]),
+                        backgroundImage: avatarImageProvider(
+                          group.avatars[index],
+                        ),
                       ),
                     ),
                   );

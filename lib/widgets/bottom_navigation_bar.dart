@@ -12,11 +12,11 @@ class AppBottomNavigationBar extends StatelessWidget {
   final Map<int, GlobalKey>? navItemKeys;
 
   const AppBottomNavigationBar({
-    Key? key,
+    super.key,
     required this.currentIndex,
     required this.onItemTapped,
     this.navItemKeys,
-  }) : super(key: key);
+  });
 
   static const List<_NavItem> _navItems = [
     _NavItem(icon: Icons.chat_bubble_outline, label: 'Notes'),
@@ -27,7 +27,6 @@ class AppBottomNavigationBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.of(context).viewPadding.bottom;
     return ClipRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(
@@ -35,26 +34,24 @@ class AppBottomNavigationBar extends StatelessWidget {
           sigmaY: AppTheme.blurSigma,
         ),
         child: Container(
-          padding: EdgeInsets.fromLTRB(
-            25,
-            AppTheme.verticalPadding,
-            25,
-            AppTheme.verticalPadding + bottomInset,
-          ),
-          constraints: BoxConstraints(
-            minHeight: AppTheme.bottomNavHeight + bottomInset,
-          ),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.8),
+            color: Colors.white.withValues(alpha: 0.8),
             border: const Border(
               top: BorderSide(color: AppTheme.divider),
             ),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: List.generate(
-              _navItems.length,
-              (index) => _buildNavItem(index),
+          child: SafeArea(
+            top: false,
+            minimum: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(25, 4, 25, 0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: List.generate(
+                  _navItems.length,
+                  (index) => _buildNavItem(index),
+                ),
+              ),
             ),
           ),
         ),
@@ -72,7 +69,7 @@ class AppBottomNavigationBar extends StatelessWidget {
       onTap: () => onItemTapped(index),
       child: Padding(
         padding: const EdgeInsets.symmetric(
-          vertical: 10,
+          vertical: 6,
           horizontal: 8,
         ),
         child: Column(

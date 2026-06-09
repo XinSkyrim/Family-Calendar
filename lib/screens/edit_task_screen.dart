@@ -7,6 +7,7 @@ import '../themes/app_theme.dart';
 import '../assets/figma_assets.dart';
 import '../models/task.dart';
 import '../services/task_invitation_service.dart';
+import '../widgets/avatar_image.dart';
 import 'family_selection_screen.dart';
 import 'select_members_screen.dart';
 
@@ -78,6 +79,44 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
     return null;
   }
 
+  Future<Map<String, dynamic>?> _findFamilyMemberByUid(
+    String familyId,
+    String uid,
+  ) async {
+    if (familyId.isEmpty || uid.isEmpty) {
+      return null;
+    }
+
+    final firestore = FirebaseFirestore.instance;
+    final membersRef = firestore
+        .collection('families')
+        .doc(familyId)
+        .collection('members');
+
+    final directDoc = await membersRef.doc(uid).get();
+    if (directDoc.exists) {
+      return directDoc.data();
+    }
+
+    final uidQuery = await membersRef
+        .where('uid', isEqualTo: uid)
+        .limit(1)
+        .get();
+    if (uidQuery.docs.isNotEmpty) {
+      return uidQuery.docs.first.data();
+    }
+
+    final userIdQuery = await membersRef
+        .where('userId', isEqualTo: uid)
+        .limit(1)
+        .get();
+    if (userIdQuery.docs.isNotEmpty) {
+      return userIdQuery.docs.first.data();
+    }
+
+    return null;
+  }
+
   Future<void> _loadInitialParticipants() async {
     final taskId = _task.id;
     if (taskId == null || taskId.isEmpty) {
@@ -103,31 +142,42 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
           .toSet();
 
       final pendingParticipantIds =
-      ((data['pendingParticipantIds'] as List?) ?? [])
-          .map((e) => e.toString())
-          .where((id) => id.trim().isNotEmpty)
-          .toSet();
+          ((data['pendingParticipantIds'] as List?) ?? [])
+              .map((e) => e.toString())
+              .where((id) => id.trim().isNotEmpty)
+              .toSet();
 
       final List<SelectedTaskMember> members = [];
+      final currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+      final displayParticipantIds = <String>{
+        ...participantIds,
+        ...pendingParticipantIds,
+      }..removeWhere((id) => id == currentUid);
 
-      // Only display accepted/current participants.
-      for (final uid in participantIds) {
+      for (final uid in displayParticipantIds) {
         final userData = await _findUserByUid(uid);
+        final memberData = await _findFamilyMemberByUid(familyId, uid);
         final name =
-        (userData?['fullName'] ??
-            userData?['name'] ??
-            userData?['displayName'] ??
-            'Unknown Member')
-            .toString()
-            .trim();
+            (userData?['fullName'] ??
+                    userData?['name'] ??
+                    userData?['displayName'] ??
+                    memberData?['nickname'] ??
+                    memberData?['fullName'] ??
+                    memberData?['name'] ??
+                    'Unknown Member')
+                .toString()
+                .trim();
 
         final avatarUrl =
-        (userData?['photoURL'] ??
-            userData?['photoUrl'] ??
-            userData?['avatar'] ??
-            '')
-            .toString()
-            .trim();
+            (userData?['photoURL'] ??
+                    userData?['photoUrl'] ??
+                    userData?['avatar'] ??
+                    memberData?['photoURL'] ??
+                    memberData?['photoUrl'] ??
+                    memberData?['avatar'] ??
+                    '')
+                .toString()
+                .trim();
 
         members.add(
           SelectedTaskMember(
@@ -278,8 +328,9 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
     });
 
     try {
-      final eventRef =
-      FirebaseFirestore.instance.collection('events').doc(taskId);
+      final eventRef = FirebaseFirestore.instance
+          .collection('events')
+          .doc(taskId);
       final eventSnapshot = await eventRef.get();
 
       if (!eventSnapshot.exists) {
@@ -296,32 +347,32 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
           .toSet();
 
       final oldPendingIds =
-      ((eventData['pendingParticipantIds'] as List?) ?? [])
-          .map((e) => e.toString())
-          .where((id) => id.trim().isNotEmpty)
-          .toSet();
+          ((eventData['pendingParticipantIds'] as List?) ?? [])
+              .map((e) => e.toString())
+              .where((id) => id.trim().isNotEmpty)
+              .toSet();
 
       final oldAcceptedIds =
-      ((eventData['acceptedParticipantIds'] as List?) ?? [])
-          .map((e) => e.toString())
-          .where((id) => id.trim().isNotEmpty)
-          .toSet();
+          ((eventData['acceptedParticipantIds'] as List?) ?? [])
+              .map((e) => e.toString())
+              .where((id) => id.trim().isNotEmpty)
+              .toSet();
 
       final oldDeclinedIds =
-      ((eventData['declinedParticipantIds'] as List?) ?? [])
-          .map((e) => e.toString())
-          .where((id) => id.trim().isNotEmpty)
-          .toSet();
+          ((eventData['declinedParticipantIds'] as List?) ?? [])
+              .map((e) => e.toString())
+              .where((id) => id.trim().isNotEmpty)
+              .toSet();
 
       final selectedIds = _buildParticipantIds(user.uid).toSet();
 
       final newInviteeIds = selectedIds
           .where(
             (id) =>
-        id != user.uid &&
-            !oldParticipantIds.contains(id) &&
-            !oldPendingIds.contains(id),
-      )
+                id != user.uid &&
+                !oldParticipantIds.contains(id) &&
+                !oldPendingIds.contains(id),
+          )
           .toList();
 
       final nextParticipantIds = oldParticipantIds
@@ -344,8 +395,9 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
 
       nextAcceptedIds.add(user.uid);
 
-      final nextDeclinedIds =
-      oldDeclinedIds.where((id) => selectedIds.contains(id)).toSet();
+      final nextDeclinedIds = oldDeclinedIds
+          .where((id) => selectedIds.contains(id))
+          .toSet();
 
       nextDeclinedIds.removeAll(newInviteeIds);
 
@@ -461,37 +513,14 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
   }
 
   Widget _buildParticipantAvatar(SelectedTaskMember member) {
-    final hasImage = member.avatarUrl.trim().isNotEmpty;
-
     return Padding(
       padding: const EdgeInsets.only(right: 8.0),
       child: CircleAvatar(
         radius: 22,
         backgroundColor: const Color(0xFFDCE1E8),
-        backgroundImage: hasImage ? NetworkImage(member.avatarUrl) : null,
-        child: hasImage
-            ? null
-            : Text(
-          _memberInitials(member.name),
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
+        backgroundImage: avatarImageProvider(member.avatarUrl),
       ),
     );
-  }
-
-  String _memberInitials(String name) {
-    final parts = name
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((part) => part.isNotEmpty)
-        .toList();
-
-    if (parts.isEmpty) return '?';
-
-    return parts.take(2).map((e) => e[0]).join().toUpperCase();
   }
 
   @override
@@ -899,8 +928,9 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
           )
         else
           Wrap(
-            children:
-            _selectedParticipants.map(_buildParticipantAvatar).toList(),
+            children: _selectedParticipants
+                .map(_buildParticipantAvatar)
+                .toList(),
           ),
       ],
     );
@@ -924,17 +954,17 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
             ),
             child: _isUpdating
                 ? const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                color: Colors.black,
-              ),
-            )
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Colors.black,
+                    ),
+                  )
                 : const Text(
-              'Update Task',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-            ),
+                    'Update Task',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                  ),
           ),
         ),
         const SizedBox(height: 12),
@@ -952,17 +982,17 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
             ),
             child: _isDeleting
                 ? const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                color: Colors.redAccent,
-              ),
-            )
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Colors.redAccent,
+                    ),
+                  )
                 : const Text(
-              'Delete Task',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-            ),
+                    'Delete Task',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                  ),
           ),
         ),
       ],

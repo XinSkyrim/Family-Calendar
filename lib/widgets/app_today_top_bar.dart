@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 
 import '../screens/notifications_screen.dart';
 import '../themes/app_theme.dart';
 import '../services/user_profile_service.dart';
+import 'avatar_image.dart';
 
 class AppTodayTopBar extends StatelessWidget {
   final String title;
@@ -79,25 +79,8 @@ class _HeaderAvatar extends StatelessWidget {
       ),
       child: ClipOval(
         child: hasImage
-            ? CachedNetworkImage(
-                imageUrl: imageUrl,
-                fit: BoxFit.cover,
-                placeholder: (context, url) => Container(
-                  color: const Color(0xFFF1F5F9),
-                ),
-                errorWidget: (context, url, error) => Container(
-                  color: const Color(0xFFF1F5F9),
-                  child: const Icon(
-                    Icons.person,
-                    size: 18,
-                    color: Colors.grey,
-                  ),
-                ),
-              )
-            : Container(
-                color: const Color(0xFFF1F5F9),
-                child: const Icon(Icons.person, size: 18, color: Colors.grey),
-              ),
+            ? AvatarImage(imageUrl: imageUrl)
+            : const AvatarImage(imageUrl: ''),
       ),
     );
   }
@@ -111,9 +94,9 @@ class _NotificationsButton extends StatelessWidget {
     final user = FirebaseAuth.instance.currentUser;
 
     return GestureDetector(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-      ),
+      onTap: () => Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const NotificationsScreen())),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -132,7 +115,11 @@ class _NotificationsButton extends StatelessWidget {
               ],
             ),
             child: const Center(
-              child: Icon(Icons.notifications, size: 18, color: AppTheme.headline),
+              child: Icon(
+                Icons.notifications,
+                size: 18,
+                color: AppTheme.headline,
+              ),
             ),
           ),
           if (user != null)
@@ -150,7 +137,10 @@ class _NotificationsButton extends StatelessWidget {
                   top: -4,
                   right: -4,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 2,
+                    ),
                     decoration: const BoxDecoration(
                       color: Color(0xFFEF4444),
                       borderRadius: BorderRadius.all(Radius.circular(999)),

@@ -10,6 +10,7 @@ import '../models/task.dart';
 import '../navigation/app_bottom_nav.dart';
 import '../themes/app_theme.dart';
 import '../widgets/app_today_top_bar.dart';
+import '../widgets/avatar_image.dart';
 import '../widgets/bottom_navigation_bar.dart';
 import '../widgets/event_card.dart';
 import 'add_task_screen.dart';
@@ -109,7 +110,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   DateTime get _selectedDate => _days[_selectedDayIndex];
 
-
   @override
   Widget build(BuildContext context) {
     final mediaPadding = MediaQuery.of(context).padding;
@@ -189,9 +189,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    return AppTodayTopBar(
-      title: DateFormat('d MMMM').format(_selectedDate),
-    );
+    return AppTodayTopBar(title: DateFormat('d MMMM').format(_selectedDate));
   }
 
   Widget _buildHeaderAvatars() {
@@ -240,22 +238,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
         ),
         child: ClipOval(
           child: hasImage
-              ? Image.network(
-                  imageUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    color: const Color(0xFFF1F5F9),
-                    child: const Icon(
-                      Icons.person,
-                      size: 18,
-                      color: Colors.grey,
-                    ),
-                  ),
-                )
-              : Container(
-                  color: const Color(0xFFF1F5F9),
-                  child: const Icon(Icons.person, size: 18, color: Colors.grey),
-                ),
+              ? AvatarImage(imageUrl: imageUrl)
+              : const AvatarImage(imageUrl: ''),
         ),
       ),
     );
@@ -304,8 +288,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   top: -4,
                   right: -4,
                   child: Container(
-                    padding:
-                    const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 2,
+                    ),
                     decoration: const BoxDecoration(
                       color: Color(0xFFEF4444),
                       borderRadius: BorderRadius.all(Radius.circular(999)),
@@ -673,15 +659,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
     Map<String, String> participantNames,
     Map<String, String> participantAvatars,
   ) {
-    final participants = event.participantIds
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+    final displayParticipantIds = event.participantIds
+        .where((id) => id != currentUid)
+        .toList();
+    final participants = displayParticipantIds
         .map((id) => participantNames[id] ?? 'Member')
         .toList();
-
-    final avatarUrls = event.participantIds
-        .map((id) => participantAvatars[id] ?? '')
-        .toList();
-
-    debugPrint('avatarUrls: $avatarUrls');
 
     return EventCard(
       color: _eventColor(event.eventType),
@@ -692,8 +676,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
         event.endTime,
         event.isAllDay,
       ),
-      participants: avatarUrls,
-      subtitle: null,
+      participants: const [],
+      subtitle: event.description.trim().isEmpty
+          ? null
+          : event.description.trim(),
       trailingIcon: null,
       onTap: () {
         final task = Task(
@@ -889,7 +875,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
       ),
     );
   }
-
 }
 
 enum _FlowItemType { hourGap, minuteGap, event }
