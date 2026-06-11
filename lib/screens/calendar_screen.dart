@@ -1009,7 +1009,7 @@ class _CalendarDateGrid extends StatelessWidget {
                     label,
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: Color(0xFF7B8190),
+                      color: Color(0xFFD4B76A),
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
                     ),
