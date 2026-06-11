@@ -42,7 +42,7 @@ class _MemoDetailScreenState extends State<MemoDetailScreen> {
     height: 1.6,
   );
   static const double _minDetailBodyHeight = 112;
-  static const double _maxDetailBodyHeight = 560;
+  static const double _maxDetailBodyHeight = 500;
   static const double _bottomActionButtonHeight = 44;
   static const double _bottomActionBottomOffset = 20;
   static const double _bottomActionTopGap = 18;
@@ -823,30 +823,14 @@ class _MemoDetailScreenState extends State<MemoDetailScreen> {
           child: Column(
             children: [
               const SizedBox(height: 39),
-              Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: _cardBorder),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFFAC638).withValues(alpha: 0.05),
-                      blurRadius: 20,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                padding: const EdgeInsets.fromLTRB(25, 21, 25, 25),
-                child: LayoutBuilder(
-                  builder: (context, cardConstraints) {
-                    return _buildEditableBody(
-                      context,
-                      maxBodyHeight: viewportConfig.maxBodyHeight,
-                      contentWidth: cardConstraints.maxWidth,
-                    );
-                  },
-                ),
+              LayoutBuilder(
+                builder: (context, bodyConstraints) {
+                  return _buildEditableBody(
+                    context,
+                    maxBodyHeight: viewportConfig.maxBodyHeight,
+                    contentWidth: bodyConstraints.maxWidth,
+                  );
+                },
               ),
             ],
           ),

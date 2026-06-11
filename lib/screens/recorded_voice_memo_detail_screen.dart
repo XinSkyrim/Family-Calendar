@@ -9,6 +9,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:just_audio/just_audio.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../themes/app_theme.dart';
 import 'add_task_screen.dart';
@@ -46,8 +47,8 @@ class _RecordedVoiceMemoDetailScreenState
   static const _primaryColor = Color(0xFF0F172A);
   static const _accentColor = Color(0xFFFAC638);
   static const _voiceTint = Color(0xFFFFF8E3);
-  static const double _playerCardHeight = 260;
-  static const double _notesCardHeight = 340;
+  static const double _playerCardHeight = 208;
+  static const double _notesCardHeight = 300;
 
   late final AudioPlayer _player;
   late final TextEditingController _titleController;
@@ -137,6 +138,8 @@ class _RecordedVoiceMemoDetailScreenState
       if (widget.localAudioPath.isNotEmpty &&
           File(widget.localAudioPath).existsSync()) {
         await _player.setFilePath(widget.localAudioPath);
+      } else if (await _loadCachedAudio()) {
+        // Cached remote audio is ready.
       } else {
         await _loadRemoteAudio();
       }
@@ -159,6 +162,38 @@ class _RecordedVoiceMemoDetailScreenState
     }
   }
 
+  Future<bool> _loadCachedAudio() async {
+    final cacheFile = await _cachedAudioFile();
+    if (!await cacheFile.exists()) {
+      return false;
+    }
+
+    if (await cacheFile.length() <= 0) {
+      return false;
+    }
+
+    await _player.setFilePath(cacheFile.path);
+    return true;
+  }
+
+  Future<File> _cachedAudioFile() async {
+    final cacheDir = await getTemporaryDirectory();
+    final audioDir = Directory(
+      '${cacheDir.path}${Platform.pathSeparator}voice_memos',
+    );
+    if (!await audioDir.exists()) {
+      await audioDir.create(recursive: true);
+    }
+
+    final rawKey = widget.memoId.trim().isNotEmpty
+        ? widget.memoId.trim()
+        : widget.audioStoragePath.trim().isNotEmpty
+        ? widget.audioStoragePath.trim()
+        : widget.audioUrl.trim();
+    final safeKey = rawKey.replaceAll(RegExp(r'[^A-Za-z0-9_.-]'), '_');
+    return File('${audioDir.path}${Platform.pathSeparator}$safeKey.m4a');
+  }
+
   String _audioUnavailableMessage(Object error) {
     final hasLocalPath = widget.localAudioPath.trim().isNotEmpty;
     final hasRemoteUrl = widget.audioUrl.trim().isNotEmpty;
@@ -179,7 +214,7 @@ class _RecordedVoiceMemoDetailScreenState
 
     if (audioUrl.isNotEmpty) {
       try {
-        await _player.setUrl(audioUrl);
+        await _cacheRemoteAudioFromUrl(audioUrl);
         return;
       } catch (_) {
         if (storagePath.isEmpty) {
@@ -195,7 +230,7 @@ class _RecordedVoiceMemoDetailScreenState
     final freshUrl = await FirebaseStorage.instance
         .ref(storagePath)
         .getDownloadURL();
-    await _player.setUrl(freshUrl);
+    await _cacheRemoteAudioFromUrl(freshUrl);
 
     if (widget.memoId.isNotEmpty && freshUrl != audioUrl) {
       unawaited(
@@ -204,6 +239,16 @@ class _RecordedVoiceMemoDetailScreenState
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true)),
       );
+    }
+  }
+
+  Future<void> _cacheRemoteAudioFromUrl(String url) async {
+    final cacheFile = await _cachedAudioFile();
+    try {
+      await FirebaseStorage.instance.refFromURL(url).writeToFile(cacheFile);
+      await _player.setFilePath(cacheFile.path);
+    } catch (_) {
+      await _player.setUrl(url);
     }
   }
 
@@ -1005,7 +1050,7 @@ class _RecordedVoiceMemoDetailScreenState
         children: [
           _buildPlayerCard(),
           const SizedBox(height: 18),
-          _buildNotesCard(context),
+          _buildNotesSection(context),
         ],
       ),
     );
@@ -1025,7 +1070,7 @@ class _RecordedVoiceMemoDetailScreenState
     return Container(
       width: double.infinity,
       height: _playerCardHeight,
-      padding: const EdgeInsets.fromLTRB(22, 20, 22, 24),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
       decoration: BoxDecoration(
         color: _voiceTint,
         borderRadius: BorderRadius.circular(28),
@@ -1062,9 +1107,9 @@ class _RecordedVoiceMemoDetailScreenState
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           SizedBox(
-            height: 86,
+            height: 70,
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final waveformWidth = math.max(constraints.maxWidth, 1.0);
@@ -1095,8 +1140,8 @@ class _RecordedVoiceMemoDetailScreenState
                   child: CustomPaint(
                     painter: _VoiceWaveformPainter(
                       progress: progress,
-                      activeColor: const Color(0xFF2563EB),
-                      inactiveColor: const Color(0xFFCBD5E1),
+                      activeColor: AppTheme.accent,
+                      inactiveColor: const Color(0xFFF1E8D8),
                     ),
                     child: const SizedBox.expand(),
                   ),
@@ -1104,7 +1149,7 @@ class _RecordedVoiceMemoDetailScreenState
               },
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           if (_audioError != null)
             Text(
               _audioError!,
@@ -1124,7 +1169,7 @@ class _RecordedVoiceMemoDetailScreenState
                   onTap: () => _seekRelative(const Duration(seconds: -15)),
                   isPrimary: false,
                 ),
-                const SizedBox(width: 26),
+                const SizedBox(width: 18),
                 _RoundPlayerButton(
                   icon: _isPlaying
                       ? Icons.pause_rounded
@@ -1133,7 +1178,7 @@ class _RecordedVoiceMemoDetailScreenState
                   isPrimary: true,
                   isBusy: _isLoadingAudio,
                 ),
-                const SizedBox(width: 26),
+                const SizedBox(width: 18),
                 _RoundPlayerButton(
                   icon: Icons.forward_10_rounded,
                   onTap: () => _seekRelative(const Duration(seconds: 15)),
@@ -1146,23 +1191,10 @@ class _RecordedVoiceMemoDetailScreenState
     );
   }
 
-  Widget _buildNotesCard(BuildContext context) {
-    return Container(
+  Widget _buildNotesSection(BuildContext context) {
+    return SizedBox(
       width: double.infinity,
       height: _notesCardHeight,
-      padding: const EdgeInsets.fromLTRB(22, 20, 22, 22),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFF1F5F9)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1225,33 +1257,33 @@ class _RoundPlayerButton extends StatelessWidget {
     return GestureDetector(
       onTap: isBusy ? null : onTap,
       child: Container(
-        width: isPrimary ? 62 : 48,
-        height: isPrimary ? 62 : 48,
+        width: 48,
+        height: 48,
         decoration: BoxDecoration(
           color: isPrimary ? _RecordedVoiceMemoColors.primary : Colors.white,
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: isPrimary ? 0.14 : 0.06),
-              blurRadius: isPrimary ? 18 : 12,
-              offset: const Offset(0, 8),
+              color: Colors.black.withValues(alpha: isPrimary ? 0.12 : 0.06),
+              blurRadius: isPrimary ? 14 : 12,
+              offset: const Offset(0, 6),
             ),
           ],
         ),
         child: Center(
           child: isBusy
               ? const SizedBox(
-                  width: 22,
-                  height: 22,
+                  width: 18,
+                  height: 18,
                   child: CircularProgressIndicator(
-                    strokeWidth: 2.4,
+                    strokeWidth: 2.2,
                     color: Colors.white,
                   ),
                 )
               : Icon(
                   icon,
                   color: isPrimary ? Colors.white : const Color(0xFF111827),
-                  size: isPrimary ? 34 : 26,
+                  size: 26,
                 ),
         ),
       ),
