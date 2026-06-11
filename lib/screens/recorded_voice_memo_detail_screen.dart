@@ -137,10 +137,8 @@ class _RecordedVoiceMemoDetailScreenState
       if (widget.localAudioPath.isNotEmpty &&
           File(widget.localAudioPath).existsSync()) {
         await _player.setFilePath(widget.localAudioPath);
-      } else if (widget.audioUrl.isNotEmpty) {
-        await _player.setUrl(widget.audioUrl);
       } else {
-        throw StateError('Missing audio source.');
+        await _loadRemoteAudio();
       }
 
       if (!mounted) {
@@ -150,14 +148,62 @@ class _RecordedVoiceMemoDetailScreenState
         _isLoadingAudio = false;
         _audioError = null;
       });
-    } catch (_) {
+    } catch (error) {
       if (!mounted) {
         return;
       }
       setState(() {
         _isLoadingAudio = false;
-        _audioError = 'Audio is unavailable on this device.';
+        _audioError = _audioUnavailableMessage(error);
       });
+    }
+  }
+
+  String _audioUnavailableMessage(Object error) {
+    final hasLocalPath = widget.localAudioPath.trim().isNotEmpty;
+    final hasRemoteUrl = widget.audioUrl.trim().isNotEmpty;
+    final hasStoragePath = widget.audioStoragePath.trim().isNotEmpty;
+
+    if (!hasRemoteUrl && !hasStoragePath) {
+      return hasLocalPath
+          ? 'Audio upload did not finish, and the local file is no longer available on this device.'
+          : 'Audio source is missing.';
+    }
+
+    return 'Audio could not be loaded. Please check your connection and Storage permissions.';
+  }
+
+  Future<void> _loadRemoteAudio() async {
+    final audioUrl = widget.audioUrl.trim();
+    final storagePath = widget.audioStoragePath.trim();
+
+    if (audioUrl.isNotEmpty) {
+      try {
+        await _player.setUrl(audioUrl);
+        return;
+      } catch (_) {
+        if (storagePath.isEmpty) {
+          rethrow;
+        }
+      }
+    }
+
+    if (storagePath.isEmpty) {
+      throw StateError('Missing audio source.');
+    }
+
+    final freshUrl = await FirebaseStorage.instance
+        .ref(storagePath)
+        .getDownloadURL();
+    await _player.setUrl(freshUrl);
+
+    if (widget.memoId.isNotEmpty && freshUrl != audioUrl) {
+      unawaited(
+        FirebaseFirestore.instance.collection('memos').doc(widget.memoId).set({
+          'audioUrl': freshUrl,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true)),
+      );
     }
   }
 

@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import '../models/task.dart';
 import '../navigation/app_bottom_nav.dart';
+import '../services/app_session_guidance.dart';
 import '../themes/app_theme.dart';
 import '../widgets/app_today_top_bar.dart';
 import '../widgets/bottom_navigation_bar.dart';
@@ -46,7 +47,7 @@ class _CalendarScreenState extends State<CalendarScreen>
   final int _selectedNavIndex = 1;
   late final List<DateTime> _days;
   late int _selectedDayIndex;
-  bool _showAddTaskHint = true;
+  bool _showAddTaskHint = false;
 
   @override
   void initState() {
@@ -57,7 +58,11 @@ class _CalendarScreenState extends State<CalendarScreen>
     _addTaskHintController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 520),
-    )..forward(from: 0);
+    );
+    _showAddTaskHint = AppSessionGuidance.shouldShow('calendar_add_task_hint');
+    if (_showAddTaskHint) {
+      _addTaskHintController?.forward(from: 0);
+    }
 
     _days = List.generate(
       7,
@@ -170,11 +175,12 @@ class _CalendarScreenState extends State<CalendarScreen>
                         right: 0,
                         child: _buildHeader(context),
                       ),
-                      Positioned(
-                        right: 24,
-                        bottom: fabBottomOffset + 74,
-                        child: _buildAddTaskHint(),
-                      ),
+                      if (_showAddTaskHint)
+                        Positioned(
+                          right: 24,
+                          bottom: fabBottomOffset + 74,
+                          child: _buildAddTaskHint(),
+                        ),
                       Positioned(
                         right: 24,
                         bottom: fabBottomOffset,

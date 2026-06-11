@@ -13,6 +13,7 @@ import 'package:record/record.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../navigation/app_bottom_nav.dart';
+import '../services/app_session_guidance.dart';
 import '../themes/app_theme.dart';
 import '../widgets/app_today_top_bar.dart';
 import '../widgets/bottom_navigation_bar.dart';
@@ -74,8 +75,12 @@ class _MemoScreenState extends State<MemoScreen> with TickerProviderStateMixin {
       vsync: this,
       duration: const Duration(milliseconds: 520),
     );
-    _showRecordButtonHint = true;
-    _recordButtonHintController?.forward(from: 0);
+    _showRecordButtonHint = AppSessionGuidance.shouldShow(
+      'memo_record_button_hint',
+    );
+    if (_showRecordButtonHint) {
+      _recordButtonHintController?.forward(from: 0);
+    }
   }
 
   @override
@@ -422,7 +427,6 @@ class _MemoScreenState extends State<MemoScreen> with TickerProviderStateMixin {
       final title = _voiceMemoAutoTitle(createdAt);
       var audioUrl = '';
       var storagePath = '';
-      var uploadFailed = false;
 
       try {
         storagePath = 'voice_memos/${user.uid}/${docRef.id}.m4a';
@@ -432,9 +436,16 @@ class _MemoScreenState extends State<MemoScreen> with TickerProviderStateMixin {
           SettableMetadata(contentType: 'audio/mp4'),
         );
         audioUrl = await storageRef.getDownloadURL();
-      } catch (_) {
-        uploadFailed = true;
-        storagePath = '';
+      } catch (error) {
+        if (!mounted) {
+          return;
+        }
+
+        _resetVoiceOverlay();
+        _showMessage(
+          'Voice note could not be uploaded. Please check your connection and try again.',
+        );
+        return;
       }
 
       await docRef.set({
@@ -447,7 +458,7 @@ class _MemoScreenState extends State<MemoScreen> with TickerProviderStateMixin {
         'localAudioPath': audioPath,
         'localAudioFileBytes': audioFileBytes,
         'audioDurationMillis': duration.inMilliseconds,
-        'aiSummaryStatus': uploadFailed ? 'failed' : 'ready',
+        'aiSummaryStatus': 'ready',
         'createdAtLocalMillis': createdAt.millisecondsSinceEpoch,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
@@ -458,12 +469,6 @@ class _MemoScreenState extends State<MemoScreen> with TickerProviderStateMixin {
       }
 
       _resetVoiceOverlay();
-
-      if (uploadFailed) {
-        _showMessage(
-          'Voice note saved locally. Audio upload will need to be retried later.',
-        );
-      }
 
       await Navigator.of(context).push(
         MaterialPageRoute(
@@ -1286,7 +1291,8 @@ class _MemoScreenState extends State<MemoScreen> with TickerProviderStateMixin {
                             Positioned.fill(
                               child: _buildVoiceComposerOverlay(),
                             ),
-                          if (!voiceUi.isRecordingSessionActive)
+                          if (_showRecordButtonHint &&
+                              !voiceUi.isRecordingSessionActive)
                             Positioned(
                               right: 24,
                               bottom: actionBottomOffset + 74,
