@@ -14,17 +14,17 @@ class FamilyScreen extends StatefulWidget {
   final String familyName;
 
   const FamilyScreen({
-    Key? key,
+    super.key,
     required this.familyId,
     required this.familyName,
-  }) : super(key: key);
+  });
 
   @override
   State<FamilyScreen> createState() => _FamilyScreenState();
 }
 
 class _FamilyScreenState extends State<FamilyScreen> {
-  int _selectedNavIndex = 2;
+  final int _selectedNavIndex = 2;
   late Future<List<Map<String, dynamic>>> _membersFuture;
 
   final TextEditingController _inviteEmailController = TextEditingController();
@@ -452,7 +452,7 @@ class _FamilyScreenState extends State<FamilyScreen> {
                     width: 54,
                     height: 54,
                     decoration: BoxDecoration(
-                      color: AppTheme.accent.withOpacity(0.1),
+                      color: AppTheme.accent.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(99),
                     ),
                     child: const Icon(
@@ -689,7 +689,7 @@ class _FamilyScreenState extends State<FamilyScreen> {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: AppTheme.headline.withOpacity(0.6),
+                color: AppTheme.headline.withValues(alpha: 0.6),
                 letterSpacing: 1.2,
               ),
             ),
@@ -701,7 +701,7 @@ class _FamilyScreenState extends State<FamilyScreen> {
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
+                    color: Colors.black.withValues(alpha: 0.04),
                     blurRadius: 30,
                     offset: const Offset(0, 8),
                   ),
@@ -719,7 +719,7 @@ class _FamilyScreenState extends State<FamilyScreen> {
                         hintText: 'group.member@email.com',
                         hintStyle: TextStyle(
                           fontSize: 16,
-                          color: AppTheme.headline.withOpacity(0.4),
+                          color: AppTheme.headline.withValues(alpha: 0.4),
                         ),
                       ),
                       style: const TextStyle(
@@ -756,7 +756,7 @@ class _FamilyScreenState extends State<FamilyScreen> {
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: AppTheme.accent.withOpacity(0.2),
+                    color: AppTheme.accent.withValues(alpha: 0.2),
                     blurRadius: 15,
                     offset: const Offset(0, 4),
                   ),
@@ -830,15 +830,15 @@ class _FamilyScreenState extends State<FamilyScreen> {
           child: Container(
             padding: const EdgeInsets.all(21),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.6),
+              color: Colors.white.withValues(alpha: 0.6),
               border: Border.all(
-                color: Colors.white.withOpacity(0.4),
+                color: Colors.white.withValues(alpha: 0.4),
                 width: 1,
               ),
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 2,
                   offset: const Offset(0, 1),
                 ),
@@ -850,7 +850,7 @@ class _FamilyScreenState extends State<FamilyScreen> {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: AppTheme.accent.withOpacity(0.15),
+                    color: AppTheme.accent.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
                   child: const Center(
@@ -935,7 +935,7 @@ class _FamilyScreenState extends State<FamilyScreen> {
                         '${members.length}',
                         style: TextStyle(
                           fontSize: 14,
-                          color: AppTheme.headline.withOpacity(0.5),
+                          color: AppTheme.headline.withValues(alpha: 0.5),
                         ),
                       ),
                     ),
@@ -1011,7 +1011,7 @@ class _FamilyScreenState extends State<FamilyScreen> {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: members.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                separatorBuilder: (_, _) => const SizedBox(height: 12),
                 itemBuilder: (context, index) {
                   final member = members[index];
                   return _buildFamilyMemberCard(member);
@@ -1034,7 +1034,7 @@ class _FamilyScreenState extends State<FamilyScreen> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 30,
             offset: const Offset(0, 8),
           ),
@@ -1048,7 +1048,7 @@ class _FamilyScreenState extends State<FamilyScreen> {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(
-                color: AppTheme.accent.withOpacity(0.2),
+                color: AppTheme.accent.withValues(alpha: 0.2),
                 width: 2,
               ),
               color: AppTheme.lightBackground,
@@ -1119,7 +1119,7 @@ class _FamilyScreenState extends State<FamilyScreen> {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(
-          color: AppTheme.accent.withOpacity(0.1),
+          color: AppTheme.accent.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(999),
         ),
         child: Text(
@@ -1146,7 +1146,7 @@ class _FamilyScreenState extends State<FamilyScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: AppTheme.accent.withOpacity(onTap == null ? 0.05 : 0.12),
+          color: AppTheme.accent.withValues(alpha: onTap == null ? 0.05 : 0.12),
           borderRadius: BorderRadius.circular(999),
         ),
         child: Text(
@@ -1155,7 +1155,7 @@ class _FamilyScreenState extends State<FamilyScreen> {
             fontSize: 10,
             fontWeight: FontWeight.w800,
             color: onTap == null
-                ? AppTheme.headline.withOpacity(0.35)
+                ? AppTheme.headline.withValues(alpha: 0.35)
                 : AppTheme.accent,
             letterSpacing: 1,
           ),

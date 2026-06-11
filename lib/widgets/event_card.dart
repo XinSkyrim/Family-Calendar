@@ -13,7 +13,7 @@ class EventCard extends StatelessWidget {
   final VoidCallback? onTap;
 
   const EventCard({
-    Key? key,
+    super.key,
     required this.color,
     required this.category,
     required this.title,
@@ -22,7 +22,7 @@ class EventCard extends StatelessWidget {
     this.subtitle,
     this.trailingIcon,
     this.onTap,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +34,7 @@ class EventCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 2,
             offset: const Offset(0, 1),
           ),
@@ -70,7 +70,7 @@ class EventCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (trailingIcon != null) trailingIcon!,
+              ?trailingIcon,
             ],
           ),
           const SizedBox(height: 12),
@@ -129,7 +129,7 @@ class EventCard extends StatelessWidget {
               border: Border.all(color: Colors.white, width: 2),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
+                  color: Colors.black.withValues(alpha: 0.08),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),

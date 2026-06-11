@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class CreateFamilyDialog extends StatefulWidget {
-  const CreateFamilyDialog({Key? key}) : super(key: key);
+  const CreateFamilyDialog({super.key});
 
   @override
   State<CreateFamilyDialog> createState() => _CreateFamilyDialogState();
@@ -110,7 +110,7 @@ class _CreateFamilyDialogState extends State<CreateFamilyDialog> {
         onTap: () => Navigator.of(context).pop(),
         child: Stack(
           children: [
-            Container(color: Colors.black.withOpacity(0.32)),
+            Container(color: Colors.black.withValues(alpha: 0.32)),
             Align(
               alignment: Alignment.bottomCenter,
               child: GestureDetector(
@@ -136,7 +136,7 @@ class _CreateFamilyDialogState extends State<CreateFamilyDialog> {
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.14),
+                        color: Colors.black.withValues(alpha: 0.14),
                         blurRadius: 16,
                         offset: const Offset(0, -4),
                       ),
@@ -233,7 +233,7 @@ class _CreateFamilyDialogState extends State<CreateFamilyDialog> {
                                   borderRadius: BorderRadius.circular(24),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: const Color(0xFFFAC638).withOpacity(0.2),
+                                      color: const Color(0xFFFAC638).withValues(alpha: 0.2),
                                       blurRadius: 15,
                                       offset: const Offset(0, 4),
                                     ),

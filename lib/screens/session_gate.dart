@@ -6,7 +6,7 @@ import 'login_screen.dart';
 import 'memo_screen.dart';
 
 class SessionGate extends StatefulWidget {
-  const SessionGate({Key? key}) : super(key: key);
+  const SessionGate({super.key});
 
   @override
   State<SessionGate> createState() => _SessionGateState();

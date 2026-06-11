@@ -47,8 +47,7 @@ class FamilySelectionResult {
 }
 
 class FamilySelectionScreen extends StatefulWidget {
-  const FamilySelectionScreen({Key? key, this.initialSelectedIds = const []})
-    : super(key: key);
+  const FamilySelectionScreen({super.key, this.initialSelectedIds = const []});
 
   final List<String> initialSelectedIds;
 
@@ -575,12 +574,12 @@ class _FamilyGroupCard extends StatelessWidget {
   final VoidCallback? onTap;
 
   const _FamilyGroupCard({
-    Key? key,
+    super.key,
     required this.group,
     this.selected = false,
     this.onSelectAll,
     this.onTap,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -591,13 +590,13 @@ class _FamilyGroupCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: _cardBackground,
           border: Border.all(
-            color: selected ? _accent.withOpacity(0.45) : _cardBorder,
+            color: selected ? _accent.withValues(alpha: 0.45) : _cardBorder,
             width: 1.2,
           ),
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -629,7 +628,7 @@ class _FamilyGroupCard extends StatelessWidget {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: _accent.withOpacity(0.18),
+                      color: _accent.withValues(alpha: 0.18),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Text(

@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 
 import '../navigation/app_bottom_nav.dart';
 import '../services/session_manager.dart';
@@ -674,7 +675,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             child: Column(
               children: [
-                _buildSettingItem('Account Details', Icons.person),
+                _buildSettingItem(
+                  'Account Details',
+                  Icons.person,
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const AccountDetailsScreen(),
+                      ),
+                    );
+                  },
+                ),
                 const Divider(
                   color: Color(0xFFF1F5F9),
                   height: 1,
@@ -781,5 +792,1014 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+}
+
+class AccountDetailsScreen extends StatefulWidget {
+  const AccountDetailsScreen({super.key});
+
+  @override
+  State<AccountDetailsScreen> createState() => _AccountDetailsScreenState();
+}
+
+class _AccountDetailsScreenState extends State<AccountDetailsScreen> {
+  late Future<_AccountDetails> _detailsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _detailsFuture = _loadAccountDetails();
+  }
+
+  Future<_AccountDetails> _loadAccountDetails() async {
+    final user = FirebaseAuth.instance.currentUser;
+    final cachedProfile = UserProfileService.profile.value;
+
+    if (user == null) {
+      return _AccountDetails(
+        fullName: cachedProfile.fullName,
+        email: '',
+        loginProvider: 'unknown',
+        emailVerified: false,
+      );
+    }
+
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+    final data = userDoc.data() ?? <String, dynamic>{};
+
+    return _AccountDetails(
+      fullName: _stringValue(data['fullName'] ?? data['username']).isNotEmpty
+          ? _stringValue(data['fullName'] ?? data['username'])
+          : cachedProfile.fullName,
+      email: _stringValue(data['email']).isNotEmpty
+          ? _stringValue(data['email'])
+          : user.email ?? '',
+      loginProvider: _stringValue(data['loginProvider']).isNotEmpty
+          ? _stringValue(data['loginProvider'])
+          : _providerLabelFromAuth(user),
+      emailVerified: data['emailVerified'] is bool
+          ? data['emailVerified'] as bool
+          : user.emailVerified,
+      createdAt: _dateTimeValue(data['createdAt']),
+    );
+  }
+
+  static String _stringValue(Object? value) {
+    return (value ?? '').toString().trim();
+  }
+
+  static DateTime? _dateTimeValue(Object? value) {
+    if (value is Timestamp) {
+      return value.toDate();
+    }
+    if (value is DateTime) {
+      return value;
+    }
+    return null;
+  }
+
+  static String _providerLabelFromAuth(User user) {
+    final providerIds = user.providerData
+        .map((provider) => provider.providerId)
+        .toSet();
+    if (providerIds.contains('google.com')) {
+      return 'google';
+    }
+    if (providerIds.contains('password')) {
+      return 'email';
+    }
+    return providerIds.isEmpty ? 'unknown' : providerIds.first;
+  }
+
+  Future<void> _showPasswordUpdateDialog() async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const _PasswordUpdateDialog(),
+    );
+  }
+
+  Future<void> _showNameUpdateDialog(String currentName) async {
+    final updatedName = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _NameUpdateDialog(initialName: currentName),
+    );
+
+    if (updatedName == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _detailsFuture = _loadAccountDetails();
+    });
+    _showMessage('Name updated successfully.');
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+      );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: SettingsScreen.bgColor,
+      body: SafeArea(
+        bottom: false,
+        child: FutureBuilder<_AccountDetails>(
+          future: _detailsFuture,
+          builder: (context, snapshot) {
+            final details = snapshot.data;
+            final isLoading =
+                snapshot.connectionState == ConnectionState.waiting &&
+                details == null;
+
+            return SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 36),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: AppTheme.backButton(context),
+                  ),
+                  const SizedBox(height: 18),
+                  if (isLoading)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 80),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (snapshot.hasError)
+                    _buildErrorState()
+                  else ...[
+                    Builder(
+                      builder: (context) {
+                        final accountDetails = details!;
+                        return Column(
+                          children: [
+                            _AccountDetailsCard(
+                              icon: Icons.badge_outlined,
+                              title: 'Personal Info',
+                              children: [
+                                _DetailRow(
+                                  label: 'Name',
+                                  value: accountDetails.fullName,
+                                  onTap: () => _showNameUpdateDialog(
+                                    accountDetails.fullName,
+                                  ),
+                                ),
+                                _DetailRow(
+                                  label: 'Email',
+                                  value: accountDetails.email,
+                                  showDivider: false,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+                            _AccountDetailsCard(
+                              icon: Icons.manage_accounts_outlined,
+                              title: 'Account',
+                              children: [
+                                _DetailRow(
+                                  label: 'Sign-in',
+                                  value: accountDetails.loginProviderLabel,
+                                ),
+                                _DetailRow(
+                                  label: 'Email verified',
+                                  value: accountDetails.emailVerified
+                                      ? 'Yes'
+                                      : 'No',
+                                ),
+                                _DetailRow(
+                                  label: 'Member since',
+                                  value: _formatDate(accountDetails.createdAt),
+                                  showDivider: false,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+                            _AccountDetailsCard(
+                              icon: Icons.shield_outlined,
+                              title: 'Security & Settings',
+                              children: [
+                                _ActionRow(
+                                  icon: Icons.lock_reset_rounded,
+                                  label: 'Password Update',
+                                  onTap: _showPasswordUpdateDialog,
+                                ),
+                                _ActionRow(
+                                  icon: Icons.notifications_none_rounded,
+                                  label: 'Notification Preferences',
+                                  onTap: () => _showMessage(
+                                    'Notification preferences are coming soon.',
+                                  ),
+                                ),
+                                _ActionRow(
+                                  icon: Icons.privacy_tip_outlined,
+                                  label: 'Privacy Settings',
+                                  onTap: () => _showMessage(
+                                    'Privacy settings are coming soon.',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Container(
+      margin: const EdgeInsets.only(top: 80),
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFF1E8D8)),
+      ),
+      child: const Text(
+        'Unable to load account details.',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+          color: AppTheme.mutedText,
+        ),
+      ),
+    );
+  }
+
+  String _formatDate(DateTime? date) {
+    if (date == null) {
+      return 'Not available';
+    }
+    return DateFormat('MMM d, yyyy').format(date.toLocal());
+  }
+}
+
+class _AccountDetailsCard extends StatelessWidget {
+  const _AccountDetailsCard({
+    required this.icon,
+    required this.title,
+    required this.children,
+  });
+
+  final IconData icon;
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 22),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: const Color(0xFFF4EDE2).withValues(alpha: 0.7),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF4A463F).withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: SettingsScreen.accentColor, size: 21),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: SettingsScreen.primaryColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({
+    required this.label,
+    required this.value,
+    this.showDivider = true,
+    this.onTap,
+  });
+
+  final String label;
+  final String value;
+  final bool showDivider;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final row = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(width: 120, child: _DetailLabel(label)),
+          Expanded(child: _DetailValue(value, textAlign: TextAlign.right)),
+          if (onTap != null) ...[
+            const SizedBox(width: 8),
+            const Icon(Icons.edit_outlined, color: Color(0xFF7E7664), size: 16),
+          ],
+        ],
+      ),
+    );
+
+    return Column(
+      children: [
+        if (onTap == null)
+          row
+        else
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: onTap,
+            child: row,
+          ),
+        if (showDivider) const Divider(height: 1, color: Color(0xFFF4EDE2)),
+      ],
+    );
+  }
+}
+
+class _DetailLabel extends StatelessWidget {
+  const _DetailLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      maxLines: 1,
+      softWrap: false,
+      style: const TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
+        color: Color(0xFF4E4537),
+      ),
+    );
+  }
+}
+
+class _DetailValue extends StatelessWidget {
+  const _DetailValue(this.value, {required this.textAlign});
+
+  final String value;
+  final TextAlign textAlign;
+
+  @override
+  Widget build(BuildContext context) {
+    final displayValue = value.isEmpty ? 'Not available' : value;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minWidth: constraints.maxWidth),
+            child: Text(
+              displayValue,
+              maxLines: 1,
+              softWrap: false,
+              textAlign: textAlign,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: SettingsScreen.primaryColor,
+                height: 1.35,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ActionRow extends StatelessWidget {
+  const _ActionRow({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 13),
+        child: Row(
+          children: [
+            Icon(icon, color: const Color(0xFF4E4537), size: 21),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: SettingsScreen.primaryColor,
+                ),
+              ),
+            ),
+            const Icon(
+              Icons.arrow_forward_ios,
+              color: Color(0xFF7E7664),
+              size: 13,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NameUpdateDialog extends StatefulWidget {
+  const _NameUpdateDialog({required this.initialName});
+
+  final String initialName;
+
+  @override
+  State<_NameUpdateDialog> createState() => _NameUpdateDialogState();
+}
+
+class _NameUpdateDialogState extends State<_NameUpdateDialog> {
+  late final TextEditingController _nameController;
+  bool _isUpdating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.initialName);
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _updateName() async {
+    final name = _nameController.text.trim();
+    final validationMessage = _validateName(name);
+    if (validationMessage != null) {
+      _showMessage(validationMessage);
+      return;
+    }
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      _showMessage('User not logged in.');
+      return;
+    }
+
+    setState(() {
+      _isUpdating = true;
+    });
+
+    try {
+      await user.updateDisplayName(name);
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'fullName': name,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      await UserProfileService.update(fullName: name);
+
+      if (!mounted) return;
+      Navigator.of(context).pop(name);
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isUpdating = false;
+      });
+      _showMessage(e.message ?? 'Failed to update name.');
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isUpdating = false;
+      });
+      _showMessage('Failed to update name.');
+    }
+  }
+
+  String? _validateName(String name) {
+    if (name.isEmpty) {
+      return 'Please enter your name.';
+    }
+    if (name.length > 50) {
+      return 'Name must be no more than 50 characters.';
+    }
+    return null;
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+      );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: !_isUpdating,
+      child: Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Update Name',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                  color: SettingsScreen.primaryColor,
+                ),
+              ),
+              const SizedBox(height: 18),
+              _ProfileTextField(
+                controller: _nameController,
+                label: 'Name',
+                enabled: !_isUpdating,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) {
+                  if (!_isUpdating) {
+                    _updateName();
+                  }
+                },
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                height: 52,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: SettingsScreen.accentColor,
+                    foregroundColor: SettingsScreen.primaryColor,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                  ),
+                  onPressed: _isUpdating ? null : _updateName,
+                  child: _isUpdating
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.4,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              SettingsScreen.primaryColor,
+                            ),
+                          ),
+                        )
+                      : const Text(
+                          'Update',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 52,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppTheme.lightBackground),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    backgroundColor: AppTheme.lightBackground,
+                    foregroundColor: SettingsScreen.primaryColor,
+                  ),
+                  onPressed: _isUpdating ? null : () => Navigator.pop(context),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PasswordUpdateDialog extends StatefulWidget {
+  const _PasswordUpdateDialog();
+
+  @override
+  State<_PasswordUpdateDialog> createState() => _PasswordUpdateDialogState();
+}
+
+class _PasswordUpdateDialogState extends State<_PasswordUpdateDialog> {
+  final TextEditingController _newPasswordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
+
+  bool _obscureNewPassword = true;
+  bool _obscureConfirmPassword = true;
+  bool _isUpdating = false;
+
+  @override
+  void dispose() {
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _updatePassword() async {
+    final newPassword = _newPasswordController.text.trim();
+    final confirmPassword = _confirmPasswordController.text.trim();
+    final validationMessage = _validateNewPassword(
+      newPassword,
+      confirmPassword,
+    );
+
+    if (validationMessage != null) {
+      _showMessage(validationMessage);
+      return;
+    }
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      _showMessage('User not logged in.');
+      return;
+    }
+
+    setState(() {
+      _isUpdating = true;
+    });
+
+    try {
+      await user.updatePassword(newPassword);
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      Navigator.of(context).pop();
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Password updated successfully.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isUpdating = false;
+      });
+      _showMessage(_passwordUpdateErrorMessage(e));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isUpdating = false;
+      });
+      _showMessage('Failed to update password.');
+    }
+  }
+
+  String? _validateNewPassword(String password, String confirmPassword) {
+    if (password.isEmpty) {
+      return 'Please enter your new password.';
+    }
+    if (password.length < 8) {
+      return 'Password must be at least 8 characters.';
+    }
+    if (password.length > 15) {
+      return 'Password must be no more than 15 characters.';
+    }
+    if (!RegExp(r'[A-Z]').hasMatch(password)) {
+      return 'Password must contain at least one uppercase letter.';
+    }
+    if (!RegExp(r'[a-z]').hasMatch(password)) {
+      return 'Password must contain at least one lowercase letter.';
+    }
+    if (!RegExp(r'[0-9]').hasMatch(password)) {
+      return 'Password must contain at least one number.';
+    }
+    if (confirmPassword.isEmpty) {
+      return 'Please confirm your new password.';
+    }
+    if (password != confirmPassword) {
+      return 'Passwords do not match.';
+    }
+    return null;
+  }
+
+  String _passwordUpdateErrorMessage(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'requires-recent-login':
+        return 'Please log in again before updating your password.';
+      case 'weak-password':
+        return 'The password is too weak.';
+      case 'user-disabled':
+        return 'This account has been disabled.';
+      case 'network-request-failed':
+        return 'Network error. Please check your connection.';
+      default:
+        return e.message ?? 'Failed to update password.';
+    }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+      );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: !_isUpdating,
+      child: Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Update Password',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                  color: SettingsScreen.primaryColor,
+                ),
+              ),
+              const SizedBox(height: 18),
+              _PasswordField(
+                controller: _newPasswordController,
+                label: 'New password',
+                obscureText: _obscureNewPassword,
+                enabled: !_isUpdating,
+                onToggleVisibility: () {
+                  setState(() {
+                    _obscureNewPassword = !_obscureNewPassword;
+                  });
+                },
+              ),
+              const SizedBox(height: 14),
+              _PasswordField(
+                controller: _confirmPasswordController,
+                label: 'Confirm password',
+                obscureText: _obscureConfirmPassword,
+                enabled: !_isUpdating,
+                onToggleVisibility: () {
+                  setState(() {
+                    _obscureConfirmPassword = !_obscureConfirmPassword;
+                  });
+                },
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                height: 52,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: SettingsScreen.accentColor,
+                    foregroundColor: SettingsScreen.primaryColor,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                  ),
+                  onPressed: _isUpdating ? null : _updatePassword,
+                  child: _isUpdating
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.4,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              SettingsScreen.primaryColor,
+                            ),
+                          ),
+                        )
+                      : const Text(
+                          'Update',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 52,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppTheme.lightBackground),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    backgroundColor: AppTheme.lightBackground,
+                    foregroundColor: SettingsScreen.primaryColor,
+                  ),
+                  onPressed: _isUpdating ? null : () => Navigator.pop(context),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PasswordField extends StatelessWidget {
+  const _PasswordField({
+    required this.controller,
+    required this.label,
+    required this.obscureText,
+    required this.enabled,
+    required this.onToggleVisibility,
+  });
+
+  final TextEditingController controller;
+  final String label;
+  final bool obscureText;
+  final bool enabled;
+  final VoidCallback onToggleVisibility;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      enabled: enabled,
+      obscureText: obscureText,
+      textInputAction: TextInputAction.next,
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(
+          color: AppTheme.mutedText,
+          fontWeight: FontWeight.w600,
+        ),
+        filled: true,
+        fillColor: const Color(0xFFFFFCF5),
+        suffixIcon: IconButton(
+          onPressed: enabled ? onToggleVisibility : null,
+          icon: Icon(
+            obscureText ? Icons.visibility_off : Icons.visibility,
+            color: AppTheme.mutedText,
+            size: 18,
+          ),
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: const BorderSide(color: Color(0xFFF1E8D8)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: const BorderSide(color: Color(0xFFF1E8D8)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: const BorderSide(
+            color: SettingsScreen.accentColor,
+            width: 1.4,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileTextField extends StatelessWidget {
+  const _ProfileTextField({
+    required this.controller,
+    required this.label,
+    required this.enabled,
+    this.textInputAction,
+    this.onSubmitted,
+  });
+
+  final TextEditingController controller;
+  final String label;
+  final bool enabled;
+  final TextInputAction? textInputAction;
+  final ValueChanged<String>? onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      enabled: enabled,
+      textInputAction: textInputAction,
+      onSubmitted: onSubmitted,
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(
+          color: AppTheme.mutedText,
+          fontWeight: FontWeight.w600,
+        ),
+        filled: true,
+        fillColor: const Color(0xFFFFFCF5),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: const BorderSide(color: Color(0xFFF1E8D8)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: const BorderSide(color: Color(0xFFF1E8D8)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: const BorderSide(
+            color: SettingsScreen.accentColor,
+            width: 1.4,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AccountDetails {
+  const _AccountDetails({
+    required this.fullName,
+    required this.email,
+    required this.loginProvider,
+    required this.emailVerified,
+    this.createdAt,
+  });
+
+  final String fullName;
+  final String email;
+  final String loginProvider;
+  final bool emailVerified;
+  final DateTime? createdAt;
+
+  String get loginProviderLabel {
+    switch (loginProvider.toLowerCase()) {
+      case 'google':
+      case 'google.com':
+        return 'Google';
+      case 'email':
+      case 'password':
+        return 'Email';
+      default:
+        return loginProvider.isEmpty ? 'Unknown' : loginProvider;
+    }
   }
 }

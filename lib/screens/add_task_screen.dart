@@ -12,13 +12,13 @@ import 'select_members_screen.dart';
 
 class AddTaskScreen extends StatefulWidget {
   const AddTaskScreen({
-    Key? key,
+    super.key,
     this.initialTitle,
     this.initialNotes,
     this.initialDate,
     this.initialTime,
     this.initialCategory,
-  }) : super(key: key);
+  });
 
   final String? initialTitle;
   final String? initialNotes;
@@ -608,7 +608,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                 borderRadius: BorderRadius.circular(14),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
+                    color: Colors.black.withValues(alpha: 0.04),
                     blurRadius: 6,
                     offset: const Offset(0, 2),
                   ),

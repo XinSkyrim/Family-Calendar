@@ -8,7 +8,7 @@ import '../services/family_invitation_service.dart';
 import '../themes/app_theme.dart';
 
 class NotificationsScreen extends StatelessWidget {
-  const NotificationsScreen({Key? key}) : super(key: key);
+  const NotificationsScreen({super.key});
 
   static const _primaryColor = Color(0xFF0F172A);
   static const _mutedColor = Color(0xFF64748B);

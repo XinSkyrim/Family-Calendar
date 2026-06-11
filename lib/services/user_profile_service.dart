@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../constants/default_avatar.dart';
+
 class UserProfile {
   final String fullName;
   final String photoUrl;
@@ -21,57 +23,26 @@ class UserProfileService {
   static const String _prefsFullName = 'cached_user_full_name';
   static const String _prefsPhotoUrl = 'cached_user_photo_url';
 
-  static final ValueNotifier<UserProfile> profile =
-      ValueNotifier(const UserProfile());
+  static final ValueNotifier<UserProfile> profile = ValueNotifier(
+    const UserProfile(),
+  );
 
   static Future<void> init() async {
     await _loadFromPreferences();
-    await _loadFromAuthIfEmpty();
-    await _loadFromFirestoreIfNeeded();
+    await refreshFromFirestore();
   }
 
   static Future<void> _loadFromPreferences() async {
     final prefs = await SharedPreferences.getInstance();
     final fullName = prefs.getString(_prefsFullName) ?? 'User';
-    final photoUrl = prefs.getString(_prefsPhotoUrl) ?? '';
+    final photoUrl = _normalizedPhotoUrl(prefs.getString(_prefsPhotoUrl));
 
     profile.value = UserProfile(fullName: fullName, photoUrl: photoUrl);
   }
 
-  static Future<void> _loadFromAuthIfEmpty() async {
+  static Future<void> refreshFromFirestore() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) {
-      return;
-    }
-
-    final currentValue = profile.value;
-    var updated = currentValue;
-
-    final authFullName = currentUser.displayName?.trim() ?? '';
-    final authPhotoUrl = currentUser.photoURL?.trim() ?? '';
-
-    if (currentValue.fullName == 'User' && authFullName.isNotEmpty) {
-      updated = updated.copyWith(fullName: authFullName);
-    }
-
-    if (currentValue.photoUrl.isEmpty && authPhotoUrl.isNotEmpty) {
-      updated = updated.copyWith(photoUrl: authPhotoUrl);
-    }
-
-    if (updated != currentValue) {
-      profile.value = updated;
-      await _saveToPreferences(updated);
-    }
-  }
-
-  static Future<void> _loadFromFirestoreIfNeeded() async {
-    final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) {
-      return;
-    }
-
-    final currentValue = profile.value;
-    if (currentValue.photoUrl.isNotEmpty && currentValue.fullName != 'User') {
       return;
     }
 
@@ -93,14 +64,15 @@ class UserProfileService {
       final fullName = (data['fullName'] ?? data['username'] ?? 'User')
           .toString()
           .trim();
-      final photoUrl = (data['photoURL'] ?? '').toString().trim();
+      final photoUrl = _normalizedPhotoUrl(data['photoURL']);
 
-      final updated = currentValue.copyWith(
-        fullName: fullName.isNotEmpty ? fullName : currentValue.fullName,
-        photoUrl: photoUrl.isNotEmpty ? photoUrl : currentValue.photoUrl,
+      final updated = UserProfile(
+        fullName: fullName.isNotEmpty ? fullName : 'User',
+        photoUrl: photoUrl,
       );
 
-      if (updated != currentValue) {
+      if (updated.fullName != profile.value.fullName ||
+          updated.photoUrl != profile.value.photoUrl) {
         profile.value = updated;
         await _saveToPreferences(updated);
       }
@@ -112,10 +84,18 @@ class UserProfileService {
   static Future<void> update({String? fullName, String? photoUrl}) async {
     final updated = profile.value.copyWith(
       fullName: fullName,
-      photoUrl: photoUrl,
+      photoUrl: photoUrl == null ? null : _normalizedPhotoUrl(photoUrl),
     );
     profile.value = updated;
     await _saveToPreferences(updated);
+  }
+
+  static String _normalizedPhotoUrl(Object? rawPhotoUrl) {
+    final photoUrl = (rawPhotoUrl ?? '').toString().trim();
+    if (photoUrl.isEmpty) {
+      return DefaultAvatar.path;
+    }
+    return photoUrl;
   }
 
   static Future<void> _saveToPreferences(UserProfile profile) async {

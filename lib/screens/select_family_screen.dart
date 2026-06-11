@@ -1,13 +1,9 @@
-import 'dart:ui';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import '../navigation/app_bottom_nav.dart';
 import '../themes/app_theme.dart';
-import '../widgets/app_today_top_bar.dart';
 import '../widgets/avatar_image.dart';
 import '../widgets/bottom_navigation_bar.dart';
 import 'create_family_dialog.dart';
@@ -48,14 +44,14 @@ const List<String> _fallbackAvatars = [
 const _cardBorder = Color.fromRGBO(236, 91, 19, 0.05);
 
 class SelectFamilyScreen extends StatefulWidget {
-  const SelectFamilyScreen({Key? key}) : super(key: key);
+  const SelectFamilyScreen({super.key});
 
   @override
   State<SelectFamilyScreen> createState() => _SelectFamilyScreenState();
 }
 
 class _SelectFamilyScreenState extends State<SelectFamilyScreen> {
-  int _selectedNavIndex = 2;
+  final int _selectedNavIndex = 2;
   late Future<List<_FamilyGroup>> _groupsFuture;
 
   @override
@@ -208,7 +204,6 @@ class _SelectFamilyScreenState extends State<SelectFamilyScreen> {
   @override
   Widget build(BuildContext context) {
     final mediaPadding = MediaQuery.of(context).padding;
-    final statusBarHeight = mediaPadding.top;
     final bottomInset = mediaPadding.bottom;
     final actionBottomOffset = bottomInset + 102;
     final listBottomSpacing = bottomInset + 164;
@@ -217,13 +212,6 @@ class _SelectFamilyScreenState extends State<SelectFamilyScreen> {
       backgroundColor: AppTheme.pageBackground,
       body: Stack(
         children: [
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: statusBarHeight,
-            child: const ColoredBox(color: AppTheme.headerBackground),
-          ),
           SafeArea(
             bottom: false,
             child: Center(
@@ -237,18 +225,10 @@ class _SelectFamilyScreenState extends State<SelectFamilyScreen> {
                     Positioned.fill(
                       child: Column(
                         children: [
-                          const SizedBox(height: 77),
+                          const SizedBox(height: 24),
                           Expanded(child: _buildList()),
                           SizedBox(height: listBottomSpacing),
                         ],
-                      ),
-                    ),
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      child: AppTodayTopBar(
-                        title: DateFormat('d MMMM').format(DateTime.now()),
                       ),
                     ),
                     Positioned(
@@ -429,7 +409,7 @@ class _SelectFamilyScreenState extends State<SelectFamilyScreen> {
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: AppTheme.accent.withOpacity(0.2),
+                  color: AppTheme.accent.withValues(alpha: 0.2),
                   blurRadius: 15,
                   offset: const Offset(0, 4),
                 ),
@@ -469,7 +449,7 @@ class _SelectFamilyScreenState extends State<SelectFamilyScreen> {
   void _showCreateFamilyDialog() async {
     await showDialog(
       context: context,
-      barrierColor: Colors.black.withOpacity(0.3),
+      barrierColor: Colors.black.withValues(alpha: 0.3),
       useSafeArea: false,
       builder: (context) {
         return const CreateFamilyDialog();
@@ -508,8 +488,7 @@ class _FamilyGroupCard extends StatelessWidget {
   final _FamilyGroup group;
   final VoidCallback? onTap;
 
-  const _FamilyGroupCard({Key? key, required this.group, this.onTap})
-    : super(key: key);
+  const _FamilyGroupCard({super.key, required this.group, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -524,7 +503,7 @@ class _FamilyGroupCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF000000).withOpacity(0.05),
+              color: const Color(0xFF000000).withValues(alpha: 0.05),
               blurRadius: 2,
               offset: const Offset(0, 1),
             ),
@@ -576,7 +555,7 @@ class _FamilyGroupCard extends StatelessWidget {
           width: 32,
           height: 32,
           decoration: BoxDecoration(
-            color: AppTheme.accent.withOpacity(0.2),
+            color: AppTheme.accent.withValues(alpha: 0.2),
             shape: BoxShape.circle,
             border: Border.all(color: Colors.white, width: 2),
           ),

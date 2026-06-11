@@ -11,13 +11,13 @@ class AppHeader extends StatelessWidget {
   final bool useBlur;
 
   const AppHeader({
-    Key? key,
+    super.key,
     this.title,
     this.leading,
     this.trailing,
     this.height = AppTheme.headerHeight,
     this.useBlur = false,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +29,7 @@ class AppHeader extends StatelessWidget {
       ),
       decoration: BoxDecoration(
         color: useBlur
-            ? Colors.white.withOpacity(0.8)
+            ? Colors.white.withValues(alpha: 0.8)
             : AppTheme.headerBackground,
         border: useBlur ? Border.all(color: AppTheme.divider) : null,
         boxShadow: useBlur
@@ -40,7 +40,7 @@ class AppHeader extends StatelessWidget {
       ),
       child: Row(
         children: [
-          if (leading != null) leading!,
+          ?leading,
           if (title != null)
             Expanded(
               child: Center(
@@ -50,7 +50,7 @@ class AppHeader extends StatelessWidget {
                 ),
               ),
             ),
-          if (trailing != null) trailing!,
+          ?trailing,
         ],
       ),
     );

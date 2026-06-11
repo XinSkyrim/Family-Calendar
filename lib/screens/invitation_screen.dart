@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../assets/figma_assets.dart';
 
 class InvitationScreen extends StatefulWidget {
-  const InvitationScreen({Key? key}) : super(key: key);
+  const InvitationScreen({super.key});
 
   @override
   State<InvitationScreen> createState() => _InvitationScreenState();
@@ -104,7 +104,7 @@ class _InvitationScreenState extends State<InvitationScreen> {
       width: 96,
       height: 96,
       decoration: BoxDecoration(
-        color: accentColor.withOpacity(0.2),
+        color: accentColor.withValues(alpha: 0.2),
         shape: BoxShape.circle,
       ),
       child: const Center(
@@ -131,7 +131,7 @@ class _InvitationScreenState extends State<InvitationScreen> {
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 14,
-            color: primaryColor.withOpacity(0.7),
+            color: primaryColor.withValues(alpha: 0.7),
             height: 1.4,
           ),
         ),
@@ -172,7 +172,7 @@ class _InvitationScreenState extends State<InvitationScreen> {
                   decoration: InputDecoration(
                     hintText: "Enter family member's email",
                     hintStyle: TextStyle(
-                      color: primaryColor.withOpacity(0.4),
+                      color: primaryColor.withValues(alpha: 0.4),
                       fontSize: 16,
                     ),
                     border: InputBorder.none,
@@ -201,7 +201,7 @@ class _InvitationScreenState extends State<InvitationScreen> {
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: primaryColor.withOpacity(0.6),
+            color: primaryColor.withValues(alpha: 0.6),
             letterSpacing: 1.2,
           ),
         ),
@@ -267,7 +267,7 @@ class _InvitationScreenState extends State<InvitationScreen> {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         border: Border.all(color: bgColor, width: 4),
-        color: accentColor.withOpacity(0.2),
+        color: accentColor.withValues(alpha: 0.2),
       ),
       child: const Center(
         child: Icon(Icons.person, size: 24, color: Colors.grey),
@@ -319,7 +319,7 @@ class _InvitationScreenState extends State<InvitationScreen> {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: primaryColor.withOpacity(0.7),
+                    color: primaryColor.withValues(alpha: 0.7),
                   ),
                 ),
               ],

@@ -13,11 +13,11 @@ import 'select_members_screen.dart';
 
 class EditTaskScreen extends StatefulWidget {
   const EditTaskScreen({
-    Key? key,
+    super.key,
     required this.initialTask,
     required this.onUpdate,
     required this.onDelete,
-  }) : super(key: key);
+  });
 
   final Task initialTask;
   final ValueChanged<Task> onUpdate;
@@ -119,7 +119,7 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
 
   Future<void> _loadInitialParticipants() async {
     final taskId = _task.id;
-    if (taskId == null || taskId.isEmpty) {
+    if (taskId.isEmpty) {
       if (!mounted) return;
       setState(() {
         _isLoadingParticipants = false;
@@ -309,7 +309,7 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
       return;
     }
 
-    if (taskId == null || taskId.isEmpty) {
+    if (taskId.isEmpty) {
       if (!mounted) return;
       _showMessage('Task not found');
       return;
@@ -450,7 +450,7 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
       return;
     }
 
-    if (taskId == null || taskId.isEmpty) {
+    if (taskId.isEmpty) {
       if (!mounted) return;
       _showMessage('Task not found.');
       return;
@@ -672,11 +672,11 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
               height: 40,
               margin: EdgeInsets.only(left: index == 0 ? 0 : 8),
               decoration: BoxDecoration(
-                color: selected ? color.withOpacity(0.15) : _card,
+                color: selected ? color.withValues(alpha: 0.15) : _card,
                 borderRadius: BorderRadius.circular(999),
                 border: Border.all(
                   color: selected
-                      ? color.withOpacity(0.25)
+                      ? color.withValues(alpha: 0.25)
                       : const Color(0xFFE5E7EB),
                   width: 1.2,
                 ),
@@ -689,7 +689,7 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                     width: 10,
                     height: 10,
                     decoration: BoxDecoration(
-                      color: selected ? color : color.withOpacity(0.4),
+                      color: selected ? color : color.withValues(alpha: 0.4),
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -759,7 +759,7 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                 borderRadius: BorderRadius.circular(14),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
+                    color: Colors.black.withValues(alpha: 0.04),
                     blurRadius: 6,
                     offset: const Offset(0, 2),
                   ),

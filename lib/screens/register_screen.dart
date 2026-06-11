@@ -7,7 +7,7 @@ import '../constants/default_avatar.dart';
 import 'login_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({Key? key}) : super(key: key);
+  const RegisterScreen({super.key});
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
@@ -314,7 +314,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         borderRadius: BorderRadius.circular(32),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 30,
             offset: const Offset(0, 18),
           ),
@@ -471,7 +471,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           borderRadius: BorderRadius.circular(999),
           boxShadow: [
             BoxShadow(
-              color: accentColor.withOpacity(0.2),
+              color: accentColor.withValues(alpha: 0.2),
               blurRadius: 15,
               offset: const Offset(0, 10),
             ),

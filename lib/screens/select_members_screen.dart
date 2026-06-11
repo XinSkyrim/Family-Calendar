@@ -35,11 +35,11 @@ class SelectedTaskMember {
 
 class SelectMembersScreen extends StatefulWidget {
   const SelectMembersScreen({
-    Key? key,
+    super.key,
     required this.initialSelectedIds,
     required this.familyId,
     required this.familyName,
-  }) : super(key: key);
+  });
 
   final List<String> initialSelectedIds;
   final String familyId;
@@ -342,7 +342,7 @@ class _SelectMembersScreenState extends State<SelectMembersScreen> {
               borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
+                  color: Colors.black.withValues(alpha: 0.04),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -465,7 +465,7 @@ class _SelectMembersScreenState extends State<SelectMembersScreen> {
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFFEA9E22).withOpacity(0.35),
+                color: const Color(0xFFEA9E22).withValues(alpha: 0.35),
                 blurRadius: 12,
                 offset: const Offset(0, 6),
               ),

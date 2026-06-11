@@ -14,10 +14,12 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../navigation/app_bottom_nav.dart';
 import '../services/app_session_guidance.dart';
+import '../services/user_profile_service.dart';
 import '../themes/app_theme.dart';
-import '../widgets/app_today_top_bar.dart';
+import '../widgets/avatar_image.dart';
 import '../widgets/bottom_navigation_bar.dart';
 import 'memo_detail_screen.dart';
+import 'notifications_screen.dart';
 import 'recorded_voice_memo_detail_screen.dart';
 
 class MemoScreen extends StatefulWidget {
@@ -35,13 +37,14 @@ class _MemoScreenState extends State<MemoScreen> with TickerProviderStateMixin {
   static const borderColor = Color.fromRGBO(236, 91, 19, 0.05);
   static const int _cardTitleLimit = 20;
   static const String _voiceMemoEmptyNotePreview =
-      'No notes yet. Tap to add notes for this voice note.';
+      'No notes yet. Tap to add notes for this voice record.';
 
   final int _selectedNavIndex = 0;
   String? _deletingMemoId;
-  bool _isBatchManaging = false;
-  bool _isBatchDeleting = false;
   final Set<String> _selectedMemoIds = <String>{};
+  final ValueNotifier<_MemoSelectionState> _memoSelection = ValueNotifier(
+    const _MemoSelectionState(),
+  );
   Set<String> _batchDeletingMemoIds = <String>{};
   List<_MemoItem> _lastMemoItems = const <_MemoItem>[];
   final AudioRecorder _audioRecorder = AudioRecorder();
@@ -89,6 +92,7 @@ class _MemoScreenState extends State<MemoScreen> with TickerProviderStateMixin {
     _recordingAmplitudeSub?.cancel();
     unawaited(WakelockPlus.disable());
     _voiceUi.dispose();
+    _memoSelection.dispose();
     _voiceBarsController.dispose();
     _recordButtonHintController?.dispose();
     _audioRecorder.dispose();
@@ -589,7 +593,7 @@ class _MemoScreenState extends State<MemoScreen> with TickerProviderStateMixin {
   }
 
   Future<void> _confirmAndDeleteMemo(_MemoItem item) async {
-    if (_deletingMemoId != null || _isBatchDeleting) {
+    if (_deletingMemoId != null || _memoSelection.value.isBatchDeleting) {
       return;
     }
 
@@ -645,7 +649,7 @@ class _MemoScreenState extends State<MemoScreen> with TickerProviderStateMixin {
 
   Future<void> _confirmAndDeleteSelectedMemos() async {
     if (_selectedMemoIds.isEmpty ||
-        _isBatchDeleting ||
+        _memoSelection.value.isBatchDeleting ||
         _deletingMemoId != null) {
       return;
     }
@@ -654,9 +658,8 @@ class _MemoScreenState extends State<MemoScreen> with TickerProviderStateMixin {
         .where((item) => _selectedMemoIds.contains(item.id))
         .toList(growable: false);
     if (selectedItems.isEmpty) {
-      setState(() {
-        _selectedMemoIds.clear();
-      });
+      _selectedMemoIds.clear();
+      _publishMemoSelection();
       return;
     }
 
@@ -665,10 +668,8 @@ class _MemoScreenState extends State<MemoScreen> with TickerProviderStateMixin {
       return;
     }
 
-    setState(() {
-      _isBatchDeleting = true;
-      _batchDeletingMemoIds = selectedItems.map((item) => item.id).toSet();
-    });
+    _batchDeletingMemoIds = selectedItems.map((item) => item.id).toSet();
+    _publishMemoSelection(isBatchDeleting: true);
 
     try {
       for (final item in selectedItems) {
@@ -679,11 +680,9 @@ class _MemoScreenState extends State<MemoScreen> with TickerProviderStateMixin {
         return;
       }
 
-      setState(() {
-        _isBatchManaging = false;
-        _selectedMemoIds.clear();
-        _batchDeletingMemoIds = <String>{};
-      });
+      _selectedMemoIds.clear();
+      _batchDeletingMemoIds = <String>{};
+      _memoSelection.value = const _MemoSelectionState();
 
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
@@ -712,10 +711,8 @@ class _MemoScreenState extends State<MemoScreen> with TickerProviderStateMixin {
         );
     } finally {
       if (mounted) {
-        setState(() {
-          _isBatchDeleting = false;
-          _batchDeletingMemoIds = <String>{};
-        });
+        _batchDeletingMemoIds = <String>{};
+        _publishMemoSelection();
       }
     }
   }
@@ -1167,39 +1164,45 @@ class _MemoScreenState extends State<MemoScreen> with TickerProviderStateMixin {
   }
 
   void _enterBatchManagement() {
-    setState(() {
-      _isBatchManaging = true;
-      _selectedMemoIds.clear();
-    });
+    _selectedMemoIds.clear();
+    _memoSelection.value = const _MemoSelectionState(isSelectionMode: true);
   }
 
   void _exitBatchManagement() {
-    if (_isBatchDeleting) {
+    if (_memoSelection.value.isBatchDeleting) {
       return;
     }
 
-    setState(() {
-      _isBatchManaging = false;
-      _selectedMemoIds.clear();
-    });
+    _selectedMemoIds.clear();
+    _memoSelection.value = const _MemoSelectionState();
   }
 
   void _toggleMemoSelection(_MemoItem item) {
-    if (_isBatchDeleting) {
+    final selection = _memoSelection.value;
+    if (selection.isBatchDeleting ||
+        selection.batchDeletingIds.contains(item.id)) {
       return;
     }
 
-    setState(() {
-      if (_selectedMemoIds.contains(item.id)) {
-        _selectedMemoIds.remove(item.id);
-      } else {
-        _selectedMemoIds.add(item.id);
-      }
-    });
+    if (_selectedMemoIds.contains(item.id)) {
+      _selectedMemoIds.remove(item.id);
+    } else {
+      _selectedMemoIds.add(item.id);
+    }
+    _publishMemoSelection();
+  }
+
+  void _publishMemoSelection({bool? isBatchDeleting}) {
+    _memoSelection.value = _MemoSelectionState(
+      isSelectionMode: _memoSelection.value.isSelectionMode,
+      selectedIds: Set<String>.unmodifiable(_selectedMemoIds),
+      isBatchDeleting: isBatchDeleting ?? _memoSelection.value.isBatchDeleting,
+      batchDeletingIds: Set<String>.unmodifiable(_batchDeletingMemoIds),
+    );
   }
 
   Future<void> _openMemoDetail(_MemoItem item) async {
-    if (_isBatchManaging) {
+    if (_memoSelection.value.isSelectionMode) {
       _toggleMemoSelection(item);
       return;
     }
@@ -1342,7 +1345,7 @@ class _MemoScreenState extends State<MemoScreen> with TickerProviderStateMixin {
                   Positioned.fill(
                     child: Column(
                       children: [
-                        const SizedBox(height: 74),
+                        const SizedBox(height: 68),
                         Expanded(child: _buildContent()),
                         SizedBox(height: contentBottomSpacing),
                       ],
@@ -1375,44 +1378,54 @@ class _MemoScreenState extends State<MemoScreen> with TickerProviderStateMixin {
   Widget _buildHeader() {
     return Stack(
       children: [
-        AppTodayTopBar(
-          title: DateFormat('d MMMM').format(DateTime.now()),
-          showNotifications: false,
-        ),
-        Positioned(top: 10, right: 24, child: _buildHeaderActions()),
+        const _MemoTopBar(),
+        Positioned(top: 12, right: 24, child: _buildHeaderActions()),
       ],
     );
   }
 
   Widget _buildHeaderActions() {
-    if (_isBatchManaging) {
-      final canDelete = _selectedMemoIds.isNotEmpty && !_isBatchDeleting;
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _HeaderActionButton(
-            icon: Icons.delete_outline_rounded,
-            tooltip: 'Delete selected notes',
-            color: canDelete ? AppTheme.error : AppTheme.inactiveIcon,
-            isBusy: _isBatchDeleting,
-            onTap: canDelete ? _confirmAndDeleteSelectedMemos : null,
-          ),
-          const SizedBox(width: 8),
-          _HeaderActionButton(
-            icon: Icons.close_rounded,
-            tooltip: 'Done',
-            color: accentColor,
-            onTap: _exitBatchManagement,
-          ),
-        ],
-      );
-    }
+    return ValueListenableBuilder<_MemoSelectionState>(
+      valueListenable: _memoSelection,
+      builder: (context, selection, child) {
+        if (selection.isSelectionMode) {
+          final canDelete =
+              selection.selectedIds.isNotEmpty && !selection.isBatchDeleting;
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _HeaderActionButton(
+                icon: Icons.delete_outline_rounded,
+                tooltip: 'Delete selected notes',
+                color: canDelete ? AppTheme.error : AppTheme.inactiveIcon,
+                isBusy: selection.isBatchDeleting,
+                onTap: canDelete ? _confirmAndDeleteSelectedMemos : null,
+              ),
+              const SizedBox(width: 8),
+              _HeaderActionButton(
+                icon: Icons.close_rounded,
+                tooltip: 'Done',
+                color: accentColor,
+                onTap: _exitBatchManagement,
+              ),
+            ],
+          );
+        }
 
-    return _HeaderActionButton(
-      icon: Icons.more_horiz_rounded,
-      tooltip: 'Manage notes',
-      color: accentColor,
-      onTap: _enterBatchManagement,
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _HeaderActionButton(
+              icon: Icons.more_horiz_rounded,
+              tooltip: 'Manage notes',
+              color: accentColor,
+              onTap: _enterBatchManagement,
+            ),
+            const SizedBox(width: 8),
+            _MemoNotificationsButton(color: accentColor),
+          ],
+        );
+      },
     );
   }
 
@@ -1471,7 +1484,7 @@ class _MemoScreenState extends State<MemoScreen> with TickerProviderStateMixin {
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 32),
               child: Text(
-                'No notes yet. Use the center record button or the note button to create one.',
+                'Ready for your first note. Tap the mic to record, or press and hold it to type manually.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Color(0xFF94A3B8),
@@ -1485,7 +1498,7 @@ class _MemoScreenState extends State<MemoScreen> with TickerProviderStateMixin {
         }
 
         return ListView.builder(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 128),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 128),
           itemCount: entries.length,
           itemBuilder: (context, index) {
             final entry = entries[index];
@@ -1514,7 +1527,7 @@ class _MemoScreenState extends State<MemoScreen> with TickerProviderStateMixin {
 
   Widget _buildSectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 14),
       child: Text(
         title.toUpperCase(),
         style: const TextStyle(
@@ -1528,30 +1541,36 @@ class _MemoScreenState extends State<MemoScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildMemoListItem(_MemoItem item) {
-    final isDeleting =
-        _deletingMemoId == item.id || _batchDeletingMemoIds.contains(item.id);
-    final card = _MemoCard(
-      key: ValueKey(item.id),
-      item: item,
-      isSelectionMode: _isBatchManaging,
-      isSelected: _selectedMemoIds.contains(item.id),
-      isDeleting: isDeleting,
-      onTap: () {
-        _openMemoDetail(item);
-      },
-    );
-
     return RepaintBoundary(
       child: Padding(
         padding: const EdgeInsets.only(bottom: 16),
-        child: _isBatchManaging
-            ? card
-            : _SwipeRevealDelete(
-                isEnabled: !isDeleting,
-                isDeleting: isDeleting,
-                onDelete: () => _confirmAndDeleteMemo(item),
-                child: card,
-              ),
+        child: ValueListenableBuilder<_MemoSelectionState>(
+          valueListenable: _memoSelection,
+          builder: (context, selection, child) {
+            final isDeleting =
+                _deletingMemoId == item.id ||
+                selection.batchDeletingIds.contains(item.id);
+            final card = _MemoCard(
+              key: ValueKey(item.id),
+              item: item,
+              isSelectionMode: selection.isSelectionMode,
+              isSelected: selection.selectedIds.contains(item.id),
+              isDeleting: isDeleting,
+              onTap: () {
+                _openMemoDetail(item);
+              },
+            );
+
+            return selection.isSelectionMode
+                ? card
+                : _SwipeRevealDelete(
+                    isEnabled: !isDeleting,
+                    isDeleting: isDeleting,
+                    onDelete: () => _confirmAndDeleteMemo(item),
+                    child: card,
+                  );
+          },
+        ),
       ),
     );
   }
@@ -2133,6 +2152,20 @@ class _MemoSection {
   const _MemoSection({required this.title, required this.items});
 }
 
+class _MemoSelectionState {
+  final bool isSelectionMode;
+  final Set<String> selectedIds;
+  final bool isBatchDeleting;
+  final Set<String> batchDeletingIds;
+
+  const _MemoSelectionState({
+    this.isSelectionMode = false,
+    this.selectedIds = const <String>{},
+    this.isBatchDeleting = false,
+    this.batchDeletingIds = const <String>{},
+  });
+}
+
 class _MemoListEntry {
   final String? sectionTitle;
   final _MemoItem? item;
@@ -2452,12 +2485,119 @@ class _MemoSelectionIndicator extends StatelessWidget {
   }
 }
 
+class _MemoTopBar extends StatelessWidget {
+  const _MemoTopBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 12, 112, 18),
+      decoration: const BoxDecoration(
+        color: AppTheme.headerBackground,
+        boxShadow: [AppTheme.headerShadow],
+      ),
+      child: const Row(
+        children: [
+          _MemoHeaderAvatar(),
+          SizedBox(width: 10),
+          Expanded(child: _MemoHeaderUserName()),
+        ],
+      ),
+    );
+  }
+}
+
+class _MemoHeaderAvatar extends StatelessWidget {
+  const _MemoHeaderAvatar();
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<UserProfile>(
+      valueListenable: UserProfileService.profile,
+      builder: (context, profile, child) {
+        return Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF1F5F9),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: ClipOval(child: AvatarImage(imageUrl: profile.photoUrl)),
+        );
+      },
+    );
+  }
+}
+
+class _MemoHeaderUserName extends StatelessWidget {
+  const _MemoHeaderUserName();
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<UserProfile>(
+      valueListenable: UserProfileService.profile,
+      builder: (context, profile, child) {
+        final name = profile.fullName.trim().isEmpty
+            ? 'User'
+            : profile.fullName.trim();
+
+        return Text(
+          name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: AppTheme.headline,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _MemoNotificationsButton extends StatelessWidget {
+  const _MemoNotificationsButton({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+
+    return _HeaderActionButton(
+      icon: Icons.notifications_none_rounded,
+      tooltip: 'Notifications',
+      color: color,
+      onTap: () => Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const NotificationsScreen())),
+      badgeStream: user == null
+          ? null
+          : FirebaseFirestore.instance
+                .collection('notifications')
+                .where('recipientId', isEqualTo: user.uid)
+                .where('isRead', isEqualTo: false)
+                .snapshots(),
+    );
+  }
+}
+
 class _HeaderActionButton extends StatelessWidget {
   final IconData icon;
   final String tooltip;
   final Color color;
   final bool isBusy;
   final VoidCallback? onTap;
+  final Stream<QuerySnapshot<Map<String, dynamic>>>? badgeStream;
 
   const _HeaderActionButton({
     required this.icon,
@@ -2465,6 +2605,7 @@ class _HeaderActionButton extends StatelessWidget {
     required this.color,
     this.isBusy = false,
     this.onTap,
+    this.badgeStream,
   });
 
   @override
@@ -2473,25 +2614,61 @@ class _HeaderActionButton extends StatelessWidget {
       message: tooltip,
       child: GestureDetector(
         onTap: isBusy ? null : onTap,
-        child: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: onTap == null ? 0.08 : 0.1),
-            borderRadius: BorderRadius.circular(48),
-          ),
-          child: Center(
-            child: isBusy
-                ? SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.2,
-                      valueColor: AlwaysStoppedAnimation<Color>(color),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: onTap == null ? 0.08 : 0.1),
+                borderRadius: BorderRadius.circular(48),
+              ),
+              child: Center(
+                child: isBusy
+                    ? SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          valueColor: AlwaysStoppedAnimation<Color>(color),
+                        ),
+                      )
+                    : Icon(icon, size: 16, color: color),
+              ),
+            ),
+            if (badgeStream != null)
+              StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream: badgeStream,
+                builder: (context, snapshot) {
+                  final count = snapshot.data?.docs.length ?? 0;
+                  if (count == 0) return const SizedBox.shrink();
+
+                  return Positioned(
+                    top: -3,
+                    right: -3,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 2,
+                      ),
+                      decoration: const BoxDecoration(
+                        color: AppTheme.error,
+                        borderRadius: BorderRadius.all(Radius.circular(999)),
+                      ),
+                      child: Text(
+                        count > 99 ? '99+' : '$count',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                     ),
-                  )
-                : Icon(icon, size: 16, color: color),
-          ),
+                  );
+                },
+              ),
+          ],
         ),
       ),
     );

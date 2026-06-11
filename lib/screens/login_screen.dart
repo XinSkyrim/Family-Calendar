@@ -12,7 +12,7 @@ import 'register_screen.dart';
 import 'memo_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+  const LoginScreen({super.key});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -106,7 +106,8 @@ class _LoginScreenState extends State<LoginScreen> {
           'email': user.email ?? email,
           'username': fallbackName.replaceAll(' ', ''),
           'fullName': fallbackName,
-          'photoURL': user.photoURL ?? DefaultAvatar.path,
+          'photoURL': DefaultAvatar.path,
+          'avatarType': 'default',
           'bio': '',
           'role': 'owner',
           'status': 'active',
@@ -117,25 +118,28 @@ class _LoginScreenState extends State<LoginScreen> {
           'lastLoginAt': now,
         });
       } else {
-        await userDocRef.set({
+        final data = userDoc.data() ?? {};
+        final currentPhotoURL = (data['photoURL'] ?? '').toString().trim();
+        final updateData = <String, dynamic>{
           'status': 'active',
           'emailVerified': true,
           'loginProvider': 'email',
           'lastLoginAt': now,
           'updatedAt': now,
-        }, SetOptions(merge: true));
+        };
+
+        _addMissingAvatarUpdate(updateData, currentPhotoURL, data);
+
+        await userDocRef.set(updateData, SetOptions(merge: true));
       }
 
-      await UserProfileService.update(
-        fullName: user.displayName?.trim().isNotEmpty == true
-            ? user.displayName!.trim()
-            : email.split('@').first,
-        photoUrl: user.photoURL ?? DefaultAvatar.path,
-      );
+      await UserProfileService.refreshFromFirestore();
 
       if (!mounted) return;
 
       await SessionManager.markActiveNow();
+
+      if (!mounted) return;
 
       _showMessage('Login successful.');
 
@@ -235,6 +239,10 @@ class _LoginScreenState extends State<LoginScreen> {
       final fallbackName = user.displayName?.trim().isNotEmpty == true
           ? user.displayName!.trim()
           : (user.email ?? 'google_user').split('@').first;
+      final googlePhotoUrl = user.photoURL?.trim() ?? '';
+      final initialPhotoUrl = googlePhotoUrl.isNotEmpty
+          ? googlePhotoUrl
+          : DefaultAvatar.path;
 
       if (!userDoc.exists) {
         await userDocRef.set({
@@ -242,7 +250,8 @@ class _LoginScreenState extends State<LoginScreen> {
           'email': user.email ?? '',
           'username': fallbackName.replaceAll(' ', ''),
           'fullName': fallbackName,
-          'photoURL': user.photoURL ?? DefaultAvatar.path,
+          'photoURL': initialPhotoUrl,
+          'avatarType': googlePhotoUrl.isNotEmpty ? 'google' : 'default',
           'bio': '',
           'role': 'owner',
           'status': 'active',
@@ -253,16 +262,6 @@ class _LoginScreenState extends State<LoginScreen> {
           'lastLoginAt': now,
         });
       } else {
-        // await userDocRef.set({
-        //   'email': user.email ?? '',
-        //   'fullName': fallbackName,
-        //   'photoURL': user.photoURL ?? '',
-        //   'status': 'active',
-        //   'emailVerified': user.emailVerified,
-        //   'loginProvider': 'google',
-        //   'lastLoginAt': now,
-        //   'updatedAt': now,
-        // }, SetOptions(merge: true));
         final data = userDoc.data() ?? {};
 
         final currentUsername = (data['username'] ?? '').toString().trim();
@@ -286,21 +285,24 @@ class _LoginScreenState extends State<LoginScreen> {
           updateData['fullName'] = fallbackName;
         }
 
-        if (currentPhotoURL.isEmpty) {
-          updateData['photoURL'] = user.photoURL ?? DefaultAvatar.path;
-        }
+        _addMissingAvatarUpdate(
+          updateData,
+          currentPhotoURL,
+          data,
+          fallbackPhotoUrl: googlePhotoUrl,
+          fallbackAvatarType: 'google',
+        );
 
         await userDocRef.set(updateData, SetOptions(merge: true));
       }
 
-      await UserProfileService.update(
-        fullName: fallbackName,
-        photoUrl: user.photoURL ?? DefaultAvatar.path,
-      );
+      await UserProfileService.refreshFromFirestore();
 
       if (!mounted) return;
 
       await SessionManager.markActiveNow();
+
+      if (!mounted) return;
 
       _showMessage('Google login successful.');
 
@@ -422,6 +424,43 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  void _addMissingAvatarUpdate(
+    Map<String, dynamic> updateData,
+    String currentPhotoURL,
+    Map<String, dynamic> userData, {
+    String fallbackPhotoUrl = DefaultAvatar.path,
+    String fallbackAvatarType = 'default',
+  }) {
+    if (currentPhotoURL.isEmpty) {
+      final initialPhotoUrl = fallbackPhotoUrl.trim().isNotEmpty
+          ? fallbackPhotoUrl.trim()
+          : DefaultAvatar.path;
+      updateData['photoURL'] = initialPhotoUrl;
+      updateData['avatarType'] = initialPhotoUrl == DefaultAvatar.path
+          ? 'default'
+          : fallbackAvatarType;
+      return;
+    }
+
+    final currentAvatarType = (userData['avatarType'] ?? '').toString().trim();
+    final normalizedFallbackPhotoUrl = fallbackPhotoUrl.trim();
+
+    if (currentAvatarType == 'default' &&
+        currentPhotoURL == DefaultAvatar.path &&
+        fallbackAvatarType == 'google' &&
+        normalizedFallbackPhotoUrl.isNotEmpty) {
+      updateData['photoURL'] = normalizedFallbackPhotoUrl;
+      updateData['avatarType'] = 'google';
+      return;
+    }
+
+    if (currentAvatarType.isEmpty) {
+      updateData['avatarType'] = currentPhotoURL == DefaultAvatar.path
+          ? 'default'
+          : 'upload';
+    }
+  }
+
   void _showMessage(String message) {
     if (!mounted) return;
 
@@ -492,7 +531,7 @@ class _LoginScreenState extends State<LoginScreen> {
         border: Border.all(color: const Color(0xFFF1F5F9), width: 1),
         boxShadow: [
           BoxShadow(
-            color: accentColor.withOpacity(0.08),
+            color: accentColor.withValues(alpha: 0.08),
             blurRadius: 50,
             offset: const Offset(0, 20),
           ),
@@ -533,7 +572,7 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
-            color: const Color(0xFFFFFDF5).withOpacity(0.5),
+            color: const Color(0xFFFFFDF5).withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(color: borderColor, width: 1),
           ),
@@ -547,7 +586,7 @@ class _LoginScreenState extends State<LoginScreen> {
               decoration: InputDecoration(
                 hintText: 'hello@family.com',
                 hintStyle: TextStyle(
-                  color: hintColor.withOpacity(0.5),
+                  color: hintColor.withValues(alpha: 0.5),
                   fontSize: 16,
                 ),
                 border: InputBorder.none,
@@ -575,7 +614,7 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
-            color: const Color(0xFFFFFDF5).withOpacity(0.5),
+            color: const Color(0xFFFFFDF5).withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(color: borderColor, width: 1),
           ),
@@ -598,7 +637,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 contentPadding: const EdgeInsets.symmetric(vertical: 12),
                 hintText: '••••••••',
                 hintStyle: TextStyle(
-                  color: hintColor.withOpacity(0.5),
+                  color: hintColor.withValues(alpha: 0.5),
                   fontSize: 16,
                 ),
                 border: InputBorder.none,

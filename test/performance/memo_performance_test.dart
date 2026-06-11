@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 
-import 'package:calendar/screens/memo_screen.dart';
 import 'package:calendar/testing/performance/memo_benchmark_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

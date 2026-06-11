@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../themes/app_theme.dart';
 
 class SubscriptionScreen extends StatelessWidget {
-  const SubscriptionScreen({Key? key}) : super(key: key);
+  const SubscriptionScreen({super.key});
 
   @override
   Widget build(BuildContext context) {

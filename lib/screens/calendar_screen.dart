@@ -9,7 +9,6 @@ import '../models/task.dart';
 import '../navigation/app_bottom_nav.dart';
 import '../services/app_session_guidance.dart';
 import '../themes/app_theme.dart';
-import '../widgets/app_today_top_bar.dart';
 import '../widgets/bottom_navigation_bar.dart';
 import '../widgets/event_card.dart';
 import 'add_task_screen.dart';
@@ -25,7 +24,6 @@ class CalendarScreen extends StatefulWidget {
 class _CalendarScreenState extends State<CalendarScreen>
     with TickerProviderStateMixin {
   static const bgColor = AppTheme.pageBackground;
-  static const primaryColor = AppTheme.headline;
   static const accentColor = AppTheme.accent;
   static const secondaryAccent = AppTheme.secondaryAccent;
 
@@ -35,26 +33,32 @@ class _CalendarScreenState extends State<CalendarScreen>
   static const _lineTopOffset = 18.0;
   static const _cardTopGapFromMarker = 0.0;
   static const _cardBottomGap = 14.0;
-  static const _dateItemWidth = 70.0;
+  static const _dateItemWidth = 42.0;
   static const _dateItemSpacing = 8.0;
-  static const _dateHorizontalPadding = 16.0;
   static const _hintTextColor = AppTheme.accent;
 
-  final ScrollController _dateScrollController = ScrollController();
+  final GlobalKey _dateSelectorKey = GlobalKey();
   AnimationController? _addTaskHintController;
-  Stream<QuerySnapshot<Map<String, dynamic>>>? _eventsStream;
   List<_CalendarEvent> _cachedEvents = <_CalendarEvent>[];
   final int _selectedNavIndex = 1;
-  late final List<DateTime> _days;
-  late int _selectedDayIndex;
+  DateTime _today = _dateOnly(DateTime.now());
+  DateTime _selectedDate = _dateOnly(DateTime.now());
+  DateTime _visibleMonth = _monthOnly(DateTime.now());
+  bool _isDatePickerExpanded = false;
   bool _showAddTaskHint = false;
+
+  static DateTime _dateOnly(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
+
+  static DateTime _monthOnly(DateTime date) {
+    return DateTime(date.year, date.month);
+  }
 
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final user = FirebaseAuth.instance.currentUser;
+    _today = _dateOnly(DateTime.now());
     _addTaskHintController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 520),
@@ -64,61 +68,153 @@ class _CalendarScreenState extends State<CalendarScreen>
       _addTaskHintController?.forward(from: 0);
     }
 
-    _days = List.generate(
-      7,
-      (index) => DateTime(today.year, today.month, today.day + index - 3),
-    );
-    _selectedDayIndex = 3;
-
-    if (user != null) {
-      _eventsStream = FirebaseFirestore.instance
-          .collection('events')
-          .where('participantIds', arrayContains: user.uid)
-          .where('status', isEqualTo: 'active')
-          .snapshots();
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _centerSelectedDay(animate: false);
-    });
+    _selectedDate = _today;
+    _visibleMonth = _monthOnly(_today);
   }
 
   @override
   void dispose() {
     _addTaskHintController?.dispose();
-    _dateScrollController.dispose();
     super.dispose();
   }
 
-  void _centerSelectedDay({bool animate = true}) {
-    if (!_dateScrollController.hasClients) {
+  void _selectDate(DateTime date) {
+    final normalized = _dateOnly(date);
+    setState(() {
+      _selectedDate = normalized;
+      _visibleMonth = _monthOnly(normalized);
+    });
+  }
+
+  void _changeVisibleMonth(int offset) {
+    final nextMonth = DateTime(
+      _visibleMonth.year,
+      _visibleMonth.month + offset,
+    );
+
+    setState(() => _visibleMonth = nextMonth);
+  }
+
+  void _toggleDatePicker() {
+    setState(() => _isDatePickerExpanded = !_isDatePickerExpanded);
+  }
+
+  void _handleScreenPointerDown(PointerDownEvent event) {
+    if (_showAddTaskHint) {
+      _hideAddTaskHint();
+    }
+
+    if (!_isDatePickerExpanded) {
       return;
     }
 
-    final viewportWidth = math.min(MediaQuery.of(context).size.width, 430.0);
-    final itemExtent = _dateItemWidth + _dateItemSpacing;
-    final rawOffset =
-        (_selectedDayIndex * itemExtent) +
-        _dateHorizontalPadding +
-        (_dateItemWidth / 2) -
-        (viewportWidth / 2);
-
-    final targetOffset = rawOffset
-        .clamp(0.0, _dateScrollController.position.maxScrollExtent)
-        .toDouble();
-
-    if (animate) {
-      _dateScrollController.animateTo(
-        targetOffset,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
-      );
-    } else {
-      _dateScrollController.jumpTo(targetOffset);
+    final renderBox =
+        _dateSelectorKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null || !renderBox.hasSize) {
+      return;
     }
+
+    final localPosition = renderBox.globalToLocal(event.position);
+    final dateSelectorBounds = Offset.zero & renderBox.size;
+    if (dateSelectorBounds.contains(localPosition)) {
+      return;
+    }
+
+    setState(() {
+      _visibleMonth = _monthOnly(_selectedDate);
+      _isDatePickerExpanded = false;
+    });
   }
 
-  DateTime get _selectedDate => _days[_selectedDayIndex];
+  int _daysInMonth(int year, int month) {
+    return DateTime(year, month + 1, 0).day;
+  }
+
+  List<DateTime> _visibleWeekDays() {
+    final selectedInVisibleMonth =
+        _selectedDate.year == _visibleMonth.year &&
+        _selectedDate.month == _visibleMonth.month;
+    final anchor = selectedInVisibleMonth ? _selectedDate : _visibleMonth;
+    final start = anchor.subtract(Duration(days: anchor.weekday % 7));
+    return List.generate(
+      7,
+      (index) => DateTime(start.year, start.month, start.day + index),
+    );
+  }
+
+  List<DateTime> _visibleMonthDays() {
+    final firstDay = DateTime(_visibleMonth.year, _visibleMonth.month);
+    final leadingEmptyDays = firstDay.weekday % 7;
+    final dayCount = _daysInMonth(_visibleMonth.year, _visibleMonth.month);
+    final firstVisibleDay = firstDay.subtract(Duration(days: leadingEmptyDays));
+    final cells = <DateTime>[
+      for (var i = 0; i < leadingEmptyDays; i++)
+        DateTime(
+          firstVisibleDay.year,
+          firstVisibleDay.month,
+          firstVisibleDay.day + i,
+        ),
+      for (var day = 1; day <= dayCount; day++)
+        DateTime(_visibleMonth.year, _visibleMonth.month, day),
+    ];
+
+    while (cells.length % 7 != 0) {
+      final lastDay = cells.last;
+      cells.add(DateTime(lastDay.year, lastDay.month, lastDay.day + 1));
+    }
+
+    return cells;
+  }
+
+  String get _selectedDateLabel {
+    final selectedInVisibleMonth =
+        _selectedDate.year == _visibleMonth.year &&
+        _selectedDate.month == _visibleMonth.month;
+    if (!selectedInVisibleMonth) {
+      return 'Select a date';
+    }
+
+    if (_isSameDay(_selectedDate, _today)) {
+      return 'Today';
+    }
+
+    return DateFormat('EEE, d MMM').format(_selectedDate);
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _eventsStreamForSelectedDate() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return null;
+    }
+
+    final dayStart = _dateOnly(_selectedDate);
+    final dayEnd = dayStart.add(const Duration(days: 1));
+
+    return FirebaseFirestore.instance
+        .collection('events')
+        .where('participantIds', arrayContains: user.uid)
+        .where('status', isEqualTo: 'active')
+        .where(
+          'startTime',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(dayStart),
+        )
+        .where('startTime', isLessThan: Timestamp.fromDate(dayEnd))
+        .orderBy('startTime')
+        .snapshots();
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _fallbackEventsStream() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return null;
+    }
+
+    return FirebaseFirestore.instance
+        .collection('events')
+        .where('participantIds', arrayContains: user.uid)
+        .where('status', isEqualTo: 'active')
+        .snapshots();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -131,11 +227,7 @@ class _CalendarScreenState extends State<CalendarScreen>
       backgroundColor: bgColor,
       body: Listener(
         behavior: HitTestBehavior.translucent,
-        onPointerDown: (_) {
-          if (_showAddTaskHint) {
-            _hideAddTaskHint();
-          }
-        },
+        onPointerDown: _handleScreenPointerDown,
         child: Stack(
           children: [
             Positioned(
@@ -158,22 +250,12 @@ class _CalendarScreenState extends State<CalendarScreen>
                       Positioned.fill(
                         child: Column(
                           children: [
-                            const SizedBox(height: 74),
-                            Padding(
-                              padding: const EdgeInsets.only(top: 10),
-                              child: _buildDateSelector(),
-                            ),
-                            const SizedBox(height: 8),
+                            _buildDateSelector(),
+                            const SizedBox(height: 12),
                             Expanded(child: _buildTimeline(context)),
                             const SizedBox.shrink(),
                           ],
                         ),
-                      ),
-                      Positioned(
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        child: _buildHeader(context),
                       ),
                       if (_showAddTaskHint)
                         Positioned(
@@ -212,79 +294,125 @@ class _CalendarScreenState extends State<CalendarScreen>
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
-    return AppTodayTopBar(title: DateFormat('d MMMM').format(_selectedDate));
-  }
-
   Widget _buildDateSelector() {
-    return SizedBox(
-      height: 90,
-      child: ListView.separated(
-        controller: _dateScrollController,
-        padding: const EdgeInsets.symmetric(horizontal: _dateHorizontalPadding),
-        scrollDirection: Axis.horizontal,
-        itemCount: _days.length,
-        separatorBuilder: (_, index) => const SizedBox(width: _dateItemSpacing),
-        itemBuilder: (context, index) {
-          final day = _days[index];
-          final selected = index == _selectedDayIndex;
+    final displayDays = _isDatePickerExpanded
+        ? _visibleMonthDays()
+        : _visibleWeekDays();
 
-          return GestureDetector(
-            onTap: () {
-              setState(() => _selectedDayIndex = index);
-              _centerSelectedDay();
-            },
-            child: Container(
-              width: _dateItemWidth,
-              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-              decoration: BoxDecoration(
-                color: selected
-                    ? const Color(0x22E2B736)
-                    : Colors.white.withValues(alpha: 0.5),
-                border: Border.all(
-                  color: selected ? accentColor : const Color(0xFFF1F5F9),
-                  width: selected ? 2 : 1,
+    return Container(
+      key: _dateSelectorKey,
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 14),
+      decoration: BoxDecoration(
+        color: AppTheme.headerBackground,
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(32),
+          bottomRight: Radius.circular(32),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF4A463F).withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      DateFormat('MMMM yyyy').format(_visibleMonth),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppTheme.headline,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _selectedDateLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppTheme.headline.withValues(alpha: 0.56),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 2,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
               ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    DateFormat('EEE').format(day),
-                    style: TextStyle(
-                      color: selected ? accentColor : const Color(0xFF64748B),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+              const SizedBox(width: 12),
+              _CalendarDateNavButton(
+                icon: Icons.chevron_left_rounded,
+                onTap: () => _changeVisibleMonth(-1),
+              ),
+              const SizedBox(width: 6),
+              _CalendarDateNavButton(
+                icon: Icons.chevron_right_rounded,
+                onTap: () => _changeVisibleMonth(1),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: _CalendarDateGrid(
+              days: displayDays,
+              expanded: _isDatePickerExpanded,
+              visibleMonth: _visibleMonth,
+              selectedDate: _selectedDate,
+              today: _today,
+              onSelectDate: _selectDate,
+            ),
+          ),
+          const SizedBox(height: 12),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _toggleDatePicker,
+            child: SizedBox(
+              height: 20,
+              child: Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD2C5B2),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    DateFormat('d').format(day),
-                    style: TextStyle(
-                      color: selected ? accentColor : primaryColor,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
+                    const SizedBox(width: 4),
+                    Icon(
+                      _isDatePickerExpanded
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                      size: 16,
+                      color: const Color(0xFFD2C5B2),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          );
-        },
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildTimeline(BuildContext context) {
-    if (_eventsStream == null) {
+    final eventsStream = _eventsStreamForSelectedDate();
+    if (eventsStream == null) {
       return const Center(
         child: Text(
           'Please sign in first.',
@@ -298,7 +426,42 @@ class _CalendarScreenState extends State<CalendarScreen>
     }
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _eventsStream,
+      stream: eventsStream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          final fallbackStream = _fallbackEventsStream();
+          if (fallbackStream == null) {
+            return const Center(
+              child: Text(
+                'Failed to load events.',
+                style: TextStyle(
+                  color: Color(0xFF64748B),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            );
+          }
+
+          return _buildTimelineFromStream(fallbackStream);
+        }
+
+        final allEvents = _eventsFromSnapshot(snapshot);
+
+        if (snapshot.hasData) {
+          _cachedEvents = allEvents;
+        }
+
+        return _buildTimelineEvents(context, allEvents);
+      },
+    );
+  }
+
+  Widget _buildTimelineFromStream(
+    Stream<QuerySnapshot<Map<String, dynamic>>> stream,
+  ) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: stream,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return const Center(
@@ -313,149 +476,155 @@ class _CalendarScreenState extends State<CalendarScreen>
           );
         }
 
-        final allEvents =
-            snapshot.data?.docs
-                .map((doc) => _CalendarEvent.fromFirestore(doc))
-                .where((event) => event != null)
-                .cast<_CalendarEvent>()
-                .toList() ??
-            _cachedEvents;
-
+        final allEvents = _eventsFromSnapshot(snapshot);
         if (snapshot.hasData) {
           _cachedEvents = allEvents;
         }
 
-        final filteredEvents =
-            allEvents
-                .where((event) => _isSameDay(event.startTime, _selectedDate))
-                .toList()
-              ..sort((a, b) => a.startTime.compareTo(b.startTime));
+        return _buildTimelineEvents(context, allEvents);
+      },
+    );
+  }
 
-        return FutureBuilder<List<dynamic>>(
-          future: Future.wait([
-            _loadParticipantNames(filteredEvents),
-            _loadParticipantAvatars(filteredEvents),
-          ]),
-          builder: (context, snapshot) {
-            final participantNames =
-                (snapshot.data?[0] as Map<String, String>?) ??
-                <String, String>{};
+  List<_CalendarEvent> _eventsFromSnapshot(
+    AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
+  ) {
+    return snapshot.data?.docs
+            .map((doc) => _CalendarEvent.fromFirestore(doc))
+            .where((event) => event != null)
+            .cast<_CalendarEvent>()
+            .toList() ??
+        _cachedEvents;
+  }
 
-            final participantAvatars =
-                (snapshot.data?[1] as Map<String, String>?) ??
-                <String, String>{};
+  Widget _buildTimelineEvents(
+    BuildContext context,
+    List<_CalendarEvent> allEvents,
+  ) {
+    final filteredEvents =
+        allEvents
+            .where((event) => _isSameDay(event.startTime, _selectedDate))
+            .toList()
+          ..sort((a, b) => a.startTime.compareTo(b.startTime));
 
-            final int startHour;
-            final int endHour;
+    return FutureBuilder<List<dynamic>>(
+      future: Future.wait([
+        _loadParticipantNames(filteredEvents),
+        _loadParticipantAvatars(filteredEvents),
+      ]),
+      builder: (context, snapshot) {
+        final participantNames =
+            (snapshot.data?[0] as Map<String, String>?) ?? <String, String>{};
 
-            if (filteredEvents.isEmpty) {
-              startHour = 0;
-              endHour = 23;
-            } else {
-              startHour = 0;
-              endHour = 24;
-            }
+        final participantAvatars =
+            (snapshot.data?[1] as Map<String, String>?) ?? <String, String>{};
 
-            final flowItems = _buildFlowItems(
-              context,
-              filteredEvents,
-              participantNames,
-              startHour,
-              endHour,
-            );
+        final int startHour;
+        final int endHour;
 
-            return SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: _leftTimeWidth,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: flowItems
-                            .map(
-                              (item) => SizedBox(
-                                height: item.height,
-                                child: Align(
-                                  alignment: item.alignment,
-                                  child: item.leftLabel == null
-                                      ? const SizedBox.shrink()
-                                      : Padding(
-                                          padding: EdgeInsets.only(
-                                            top: item.leftTopPadding,
-                                          ),
-                                          child: Text(
-                                            item.leftLabel!,
-                                            textAlign: TextAlign.right,
-                                            style: const TextStyle(
-                                              color: Color(0xFF94A3B8),
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
+        if (filteredEvents.isEmpty) {
+          startHour = 0;
+          endHour = 23;
+        } else {
+          startHour = 0;
+          endHour = 24;
+        }
+
+        final flowItems = _buildFlowItems(
+          context,
+          filteredEvents,
+          participantNames,
+          startHour,
+          endHour,
+        );
+
+        return SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: _leftTimeWidth,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: flowItems
+                        .map(
+                          (item) => SizedBox(
+                            height: item.height,
+                            child: Align(
+                              alignment: item.alignment,
+                              child: item.leftLabel == null
+                                  ? const SizedBox.shrink()
+                                  : Padding(
+                                      padding: EdgeInsets.only(
+                                        top: item.leftTopPadding,
+                                      ),
+                                      child: Text(
+                                        item.leftLabel!,
+                                        textAlign: TextAlign.right,
+                                        style: const TextStyle(
+                                          color: Color(0xFF94A3B8),
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
                                         ),
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+                const SizedBox(width: _timelineGap),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: flowItems.map((item) {
+                      switch (item.type) {
+                        case _FlowItemType.hourGap:
+                          return SizedBox(
+                            height: item.height,
+                            child: Align(
+                              alignment: item.alignment,
+                              child: Padding(
+                                padding: EdgeInsets.only(
+                                  top: item.lineTopPadding,
+                                ),
+                                child: Container(
+                                  width: double.infinity,
+                                  height: 2,
+                                  color: const Color(0xFFF1F5F9),
                                 ),
                               ),
-                            )
-                            .toList(),
-                      ),
-                    ),
-                    const SizedBox(width: _timelineGap),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: flowItems.map((item) {
-                          switch (item.type) {
-                            case _FlowItemType.hourGap:
-                              return SizedBox(
-                                height: item.height,
-                                child: Align(
-                                  alignment: item.alignment,
-                                  child: Padding(
-                                    padding: EdgeInsets.only(
-                                      top: item.lineTopPadding,
-                                    ),
-                                    child: Container(
-                                      width: double.infinity,
-                                      height: 2,
-                                      color: const Color(0xFFF1F5F9),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            case _FlowItemType.event:
-                              return Padding(
-                                padding: EdgeInsets.only(
-                                  top: item.eventTopPadding,
-                                  bottom: item.eventBottomPadding,
-                                ),
-                                child: SizedBox(
-                                  height:
-                                      item.height -
-                                      item.eventTopPadding -
-                                      item.eventBottomPadding,
-                                  child: _buildEventCard(
-                                    context,
-                                    item.event!,
-                                    participantNames,
-                                    participantAvatars,
-                                  ),
-                                ),
-                              );
-                          }
-                        }).toList(),
-                      ),
-                    ),
-                  ],
+                            ),
+                          );
+                        case _FlowItemType.event:
+                          return Padding(
+                            padding: EdgeInsets.only(
+                              top: item.eventTopPadding,
+                              bottom: item.eventBottomPadding,
+                            ),
+                            child: SizedBox(
+                              height:
+                                  item.height -
+                                  item.eventTopPadding -
+                                  item.eventBottomPadding,
+                              child: _buildEventCard(
+                                context,
+                                item.event!,
+                                participantNames,
+                                participantAvatars,
+                              ),
+                            ),
+                          );
+                      }
+                    }).toList(),
+                  ),
                 ),
-              ),
-            );
-          },
+              ],
+            ),
+          ),
         );
       },
     );
@@ -805,6 +974,160 @@ class _FlowItem {
       eventTopPadding: _CalendarScreenState._cardTopGapFromMarker,
       eventBottomPadding: _CalendarScreenState._cardBottomGap,
       event: event,
+    );
+  }
+}
+
+class _CalendarDateGrid extends StatelessWidget {
+  const _CalendarDateGrid({
+    required this.days,
+    required this.expanded,
+    required this.visibleMonth,
+    required this.selectedDate,
+    required this.today,
+    required this.onSelectDate,
+  });
+
+  final List<DateTime> days;
+  final bool expanded;
+  final DateTime visibleMonth;
+  final DateTime selectedDate;
+  final DateTime today;
+  final ValueChanged<DateTime> onSelectDate;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Wrap(
+          spacing: _CalendarScreenState._dateItemSpacing,
+          children: const ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+              .map(
+                (label) => SizedBox(
+                  width: _CalendarScreenState._dateItemWidth,
+                  child: Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Color(0xFF7B8190),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: _CalendarScreenState._dateItemSpacing,
+          runSpacing: expanded ? 10 : 0,
+          children: days.map((day) {
+            final selected = _isSameDay(day, selectedDate);
+            final isToday = _isSameDay(day, today);
+            final inVisibleMonth =
+                day.year == visibleMonth.year &&
+                day.month == visibleMonth.month;
+            final previousDay = DateTime(day.year, day.month, day.day - 1);
+            final nextDay = DateTime(day.year, day.month, day.day + 1);
+            final touchesVisibleMonth =
+                (previousDay.year == visibleMonth.year &&
+                    previousDay.month == visibleMonth.month) ||
+                (nextDay.year == visibleMonth.year &&
+                    nextDay.month == visibleMonth.month);
+            final showMonthLabel =
+                expanded && !inVisibleMonth && touchesVisibleMonth;
+
+            return GestureDetector(
+              onTap: () => onSelectDate(day),
+              child: Container(
+                width: _CalendarScreenState._dateItemWidth,
+                height: 48,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: selected
+                      ? _CalendarScreenState.accentColor
+                      : inVisibleMonth
+                      ? Colors.transparent
+                      : Colors.white.withValues(alpha: 0.42),
+                  borderRadius: BorderRadius.circular(16),
+                  border: isToday && !selected
+                      ? Border.all(
+                          color: _CalendarScreenState.accentColor,
+                          width: 1.2,
+                        )
+                      : null,
+                  boxShadow: selected
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.10),
+                            blurRadius: 15,
+                            offset: const Offset(0, 8),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      DateFormat('d').format(day),
+                      style: TextStyle(
+                        color: selected
+                            ? const Color(0xFF271900)
+                            : inVisibleMonth
+                            ? AppTheme.headline
+                            : AppTheme.headline.withValues(alpha: 0.34),
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    if (showMonthLabel) ...[
+                      const SizedBox(height: 1),
+                      Text(
+                        DateFormat('MMM').format(day).toUpperCase(),
+                        style: TextStyle(
+                          color: AppTheme.headline.withValues(alpha: 0.34),
+                          fontSize: 8,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+}
+
+class _CalendarDateNavButton extends StatelessWidget {
+  const _CalendarDateNavButton({required this.icon, required this.onTap});
+
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.78),
+          shape: BoxShape.circle,
+          border: Border.all(color: const Color(0xFFF1E8D8)),
+        ),
+        child: Icon(icon, size: 22, color: AppTheme.headline),
+      ),
     );
   }
 }

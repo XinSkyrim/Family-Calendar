@@ -704,9 +704,9 @@ class _ChatScreenState extends State<ChatScreen>
       preferredSize: const Size.fromHeight(80),
       child: Container(
         decoration: BoxDecoration(
-          color: bgColor.withOpacity(0.95),
+          color: bgColor.withValues(alpha: 0.95),
           border: Border(
-            bottom: BorderSide(color: accentColor.withOpacity(0.10)),
+            bottom: BorderSide(color: accentColor.withValues(alpha: 0.10)),
           ),
         ),
         child: SafeArea(
@@ -756,7 +756,7 @@ class _ChatScreenState extends State<ChatScreen>
                             width: 32,
                             height: 32,
                             decoration: BoxDecoration(
-                              color: accentColor.withOpacity(0.2),
+                              color: accentColor.withValues(alpha: 0.2),
                               shape: BoxShape.circle,
                               border: Border.all(color: bgColor, width: 2),
                             ),
@@ -846,12 +846,12 @@ class _ChatScreenState extends State<ChatScreen>
                       borderRadius: BorderRadius.circular(999),
                       border: Border.all(
                         color: _isRecording
-                            ? accentColor.withOpacity(0.2)
+                            ? accentColor.withValues(alpha: 0.2)
                             : const Color(0xFFE2E8F0),
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
+                          color: Colors.black.withValues(alpha: 0.05),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -891,7 +891,7 @@ class _ChatScreenState extends State<ChatScreen>
                 borderRadius: BorderRadius.circular(999),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
+                    color: Colors.black.withValues(alpha: 0.08),
                     blurRadius: 15,
                     offset: const Offset(0, 10),
                   ),
@@ -1178,7 +1178,7 @@ class _StyledMessageBubble extends StatelessWidget {
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
+                        color: Colors.black.withValues(alpha: 0.04),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
@@ -1236,7 +1236,7 @@ class _StyledMessageBubble extends StatelessWidget {
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
+                        color: Colors.black.withValues(alpha: 0.04),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
@@ -1271,7 +1271,7 @@ class _StyledMessageBubble extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: accentColor.withOpacity(0.2),
+              color: accentColor.withValues(alpha: 0.2),
               shape: BoxShape.circle,
             ),
             child: const Center(
@@ -1309,7 +1309,7 @@ class _StyledMessageBubble extends StatelessWidget {
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
+                        color: Colors.black.withValues(alpha: 0.04),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
@@ -1362,7 +1362,7 @@ class _VoiceStatusBanner extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: accentColor.withOpacity(0.18)),
+        border: Border.all(color: accentColor.withValues(alpha: 0.18)),
       ),
       child: Row(
         children: [
@@ -1438,7 +1438,7 @@ class _EventDraftCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -1453,7 +1453,7 @@ class _EventDraftCard extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: accentColor.withOpacity(0.1),
+                  color: accentColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: const Center(

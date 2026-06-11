@@ -12,10 +12,10 @@ class AppTodayTopBar extends StatelessWidget {
   final bool showNotifications;
 
   const AppTodayTopBar({
-    Key? key,
+    super.key,
     required this.title,
     this.showNotifications = true,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +48,7 @@ class AppTodayTopBar extends StatelessWidget {
 }
 
 class _HeaderAvatar extends StatelessWidget {
-  const _HeaderAvatar({Key? key}) : super(key: key);
+  const _HeaderAvatar({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -71,7 +71,7 @@ class _HeaderAvatar extends StatelessWidget {
         border: Border.all(color: Colors.white, width: 2),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -87,7 +87,7 @@ class _HeaderAvatar extends StatelessWidget {
 }
 
 class _NotificationsButton extends StatelessWidget {
-  const _NotificationsButton({Key? key}) : super(key: key);
+  const _NotificationsButton({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -104,11 +104,11 @@ class _NotificationsButton extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.5),
+              color: Colors.white.withValues(alpha: 0.5),
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 2,
                   offset: const Offset(0, 1),
                 ),
